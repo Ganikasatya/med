@@ -1,0 +1,57 @@
+import { Menu, Bell, CalendarDays, ChevronDown } from 'lucide-react'
+import { DOCTOR } from '../../data/doctorDashboardData.js'
+
+/**
+ * Doctor console top bar: menu toggle (decorative for now) + centered title,
+ * with notifications, calendar and the doctor profile chip on the right.
+ */
+function DoctorTopbar() {
+  return (
+    <header className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-100 bg-white px-6 py-3">
+      {/* Left: menu + title */}
+      <div className="flex min-w-0 items-center gap-4">
+        <button
+          className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-50"
+          aria-label="Toggle menu"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+      </div>
+
+      {/* Center: title */}
+      <div className="min-w-0 flex-1 text-center">
+        <h1 className="truncate text-[22px] font-extrabold text-brand-navy">
+          Doctor Mitra — Doctor Dashboard
+        </h1>
+        <p className="truncate text-[13px] text-slate-500">
+          Manage appointments, queue, patients and clinic operations in real-time.
+        </p>
+      </div>
+
+      {/* Right: actions + profile */}
+      <div className="flex items-center gap-4">
+        <button className="relative text-slate-500 hover:text-brand-blue" aria-label="Notifications">
+          <Bell className="h-6 w-6" />
+          <span className="absolute -right-1.5 -top-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+            {DOCTOR.notifications}
+          </span>
+        </button>
+        <button className="text-slate-500 hover:text-brand-blue" aria-label="Calendar">
+          <CalendarDays className="h-6 w-6" />
+        </button>
+        <button className="flex items-center gap-2.5 rounded-xl px-1.5 py-1 hover:bg-slate-50">
+          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-blue text-sm font-bold text-white">
+            {DOCTOR.initials}
+          </span>
+          <span className="text-left leading-tight">
+            <span className="block text-[13px] font-bold text-brand-navy">{DOCTOR.name}</span>
+            <span className="block text-[11px] text-slate-400">{DOCTOR.specialty}</span>
+          </span>
+          <ChevronDown className="h-4 w-4 text-slate-400" />
+        </button>
+      </div>
+    </header>
+  )
+}
+
+export default DoctorTopbar
