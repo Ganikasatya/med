@@ -1,0 +1,19 @@
+# --- BookMyDoctor / Doctor Mitra — production backend dependencies ---
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+pydantic==2.7.1
+pydantic-settings==2.3.4
+email-validator==2.1.1
+
+# Persistence
+SQLAlchemy==2.0.30
+alembic==1.13.1
+# DB drivers (used only when DATABASE_URL points at them; harmless otherwise)
+psycopg2-binary==2.9.9   # PostgreSQL
+PyMySQL==1.1.1           # MySQL 8 (deck's production target) — pure-python, zero build
+
+# Auth / security
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1  # 4.1+ drops __about__ which passlib 1.7.4 probes (harmless warning)
+PyJWT==2.8.0
+python-multipart==0.0.9

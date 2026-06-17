@@ -1,0 +1,192 @@
+"""
+Module 3 — Doctor.
+
+doctors                  master record (links a user → hospital + department)
+doctor_schedule          recurring weekly OP sessions (drives the token engine)
+doctor_breaks            intra-session breaks (tea, prayer)
+doctor_holidays          one-off days off (full or partial)
+doctor_delay_logs        "running late by N mins" → feeds patient SMS + ETA
+doctor_leave_requests    multi-day leave with an approval workflow
+doctor_status            live presence (available/busy/on_break/...) — 1:1 with doctor
+"""
+from datetime import date, datetime, time
+from typing import Optional
+
+from sqlalchemy import (
+    Boolean, Date, DateTime, ForeignKey, Numeric, String, Text, Time,
+)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from ..database import Base, BigIntPK, utcnow
+
+DOCTOR_STATUSES = ("active", "inactive", "on_leave", "suspended")
+PRESENCE_STATUSES = ("available", "busy", "on_break", "away", "off_duty")
+LEAVE_TYPES = ("casual", "sick", "conference", "maternity")
+LEAVE_STATUSES = ("pending", "approved", "rejected", "cancelled")
+WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+PRACTICE_TYPES = ("clinic", "personal_clinic", "home", "online")
+
+
+class Doctor(Base):
+    __tablename__ = "doctors"
+
+    doctor_id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
+    user_id: Mapped[Optional[int]] = mapped_column(BigIntPK, ForeignKey("users.user_id"), index=True)
+    hospital_id: Mapped[int] = mapped_column(BigIntPK, ForeignKey("hospitals.hospital_id"), nullable=False, index=True)
+    department_id: Mapped[Optional[int]] = mapped_column(BigIntPK, ForeignKey("departments.department_id"), index=True)
+    name: Mapped[str] = mapped_column(String(120), default="")  # display name (may differ from login user)
+    specialization: Mapped[str] = mapped_column(String(100), default="General Physician")
+    qualification: Mapped[str] = mapped_column(String(200), default="")
+    registration_number: Mapped[Optional[str]] = mapped_column(String(50))
+    experience_years: Mapped[int] = mapped_column(default=0)
+    consultation_fee: Mapped[float] = mapped_column(Numeric(8, 2), default=0)
+    bio: Mapped[str] = mapped_column(Text, default="")
+    profile_photo_url: Mapped[Optional[str]] = mapped_column(String(255))
+    languages: Mapped[str] = mapped_column(String(200), default="")  # comma-separated
+    status: Mapped[str] = mapped_column(String(12), default="active")
+    is_available_today: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    schedules: Mapped[list["DoctorSchedule"]] = relationship(
+        back_populates="doctor", cascade="all, delete-orphan"
+    )
+    holidays: Mapped[list["DoctorHoliday"]] = relationship(
+        back_populates="doctor", cascade="all, delete-orphan"
+    )
+    delay_logs: Mapped[list["DoctorDelayLog"]] = relationship(
+        back_populates="doctor", cascade="all, delete-orphan"
+    )
+    leave_requests: Mapped[list["DoctorLeaveRequest"]] = relationship(
+        back_populates="doctor", cascade="all, delete-orphan"
+    )
+    presence: Mapped[Optional["DoctorStatus"]] = relationship(
+        back_populates="doctor", cascade="all, delete-orphan", uselist=False
+    )
+    affiliations: Mapped[list["DoctorAffiliation"]] = relationship(
+        back_populates="doctor", cascade="all, delete-orphan"
+    )
+
+
+class DoctorAffiliation(Base):
+    __tablename__ = "doctor_affiliations"
+
+    affiliation_id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
+    doctor_id: Mapped[int] = mapped_column(BigIntPK, ForeignKey("doctors.doctor_id"), nullable=False, index=True)
+    hospital_id: Mapped[Optional[int]] = mapped_column(BigIntPK, ForeignKey("hospitals.hospital_id"), index=True)
+    practice_type: Mapped[str] = mapped_column(String(20), default="clinic")
+    name: Mapped[str] = mapped_column(String(150), default="")
+    address: Mapped[str] = mapped_column(Text, default="")
+    city: Mapped[str] = mapped_column(String(100), default="")
+    latitude: Mapped[Optional[float]] = mapped_column(Numeric(9, 6))
+    longitude: Mapped[Optional[float]] = mapped_column(Numeric(9, 6))
+    consultation_fee: Mapped[float] = mapped_column(Numeric(8, 2), default=0)
+    mode: Mapped[str] = mapped_column(String(12), default="slot")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    managed_by_hospital: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    doctor: Mapped["Doctor"] = relationship(back_populates="affiliations")
+
+
+class DoctorSchedule(Base):
+    __tablename__ = "doctor_schedule"
+
+    schedule_id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
+    doctor_id: Mapped[int] = mapped_column(BigIntPK, ForeignKey("doctors.doctor_id"), nullable=False, index=True)
+    affiliation_id: Mapped[Optional[int]] = mapped_column(BigIntPK, ForeignKey("doctor_affiliations.affiliation_id"), index=True)
+    day_of_week: Mapped[str] = mapped_column(String(3), nullable=False)  # Mon..Sun
+    start_time: Mapped[time] = mapped_column(Time, nullable=False)
+    end_time: Mapped[time] = mapped_column(Time, nullable=False)
+    max_tokens: Mapped[int] = mapped_column(default=40)
+    consultation_mins: Mapped[int] = mapped_column(default=10)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    valid_from: Mapped[Optional[date]] = mapped_column(Date)
+    valid_until: Mapped[Optional[date]] = mapped_column(Date)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    doctor: Mapped["Doctor"] = relationship(back_populates="schedules")
+    breaks: Mapped[list["DoctorBreak"]] = relationship(
+        back_populates="schedule", cascade="all, delete-orphan"
+    )
+
+
+class DoctorBreak(Base):
+    __tablename__ = "doctor_breaks"
+
+    break_id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
+    schedule_id: Mapped[int] = mapped_column(BigIntPK, ForeignKey("doctor_schedule.schedule_id"), nullable=False, index=True)
+    break_start: Mapped[time] = mapped_column(Time, nullable=False)
+    break_end: Mapped[time] = mapped_column(Time, nullable=False)
+    label: Mapped[str] = mapped_column(String(50), default="Break")
+    is_recurring: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    schedule: Mapped["DoctorSchedule"] = relationship(back_populates="breaks")
+
+
+class DoctorHoliday(Base):
+    __tablename__ = "doctor_holidays"
+
+    holiday_id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
+    doctor_id: Mapped[int] = mapped_column(BigIntPK, ForeignKey("doctors.doctor_id"), nullable=False, index=True)
+    holiday_date: Mapped[date] = mapped_column(Date, nullable=False)
+    reason: Mapped[str] = mapped_column(String(200), default="")
+    is_full_day: Mapped[bool] = mapped_column(Boolean, default=True)
+    partial_start: Mapped[Optional[time]] = mapped_column(Time)
+    partial_end: Mapped[Optional[time]] = mapped_column(Time)
+    created_by: Mapped[Optional[int]] = mapped_column(BigIntPK, ForeignKey("users.user_id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    doctor: Mapped["Doctor"] = relationship(back_populates="holidays")
+
+
+class DoctorDelayLog(Base):
+    __tablename__ = "doctor_delay_logs"
+
+    delay_id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
+    doctor_id: Mapped[int] = mapped_column(BigIntPK, ForeignKey("doctors.doctor_id"), nullable=False, index=True)
+    delay_date: Mapped[date] = mapped_column(Date, nullable=False)
+    delay_minutes: Mapped[int] = mapped_column(nullable=False)
+    reason: Mapped[str] = mapped_column(String(200), default="")
+    notified_patients: Mapped[bool] = mapped_column(Boolean, default=False)
+    logged_by: Mapped[Optional[int]] = mapped_column(BigIntPK, ForeignKey("users.user_id"))
+    logged_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    doctor: Mapped["Doctor"] = relationship(back_populates="delay_logs")
+
+
+class DoctorLeaveRequest(Base):
+    __tablename__ = "doctor_leave_requests"
+
+    leave_id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
+    doctor_id: Mapped[int] = mapped_column(BigIntPK, ForeignKey("doctors.doctor_id"), nullable=False, index=True)
+    leave_from: Mapped[date] = mapped_column(Date, nullable=False)
+    leave_to: Mapped[date] = mapped_column(Date, nullable=False)
+    leave_type: Mapped[str] = mapped_column(String(16), default="casual")
+    reason: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(12), default="pending", index=True)
+    approved_by: Mapped[Optional[int]] = mapped_column(BigIntPK, ForeignKey("users.user_id"))
+    rejection_reason: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    doctor: Mapped["Doctor"] = relationship(back_populates="leave_requests")
+
+
+class DoctorStatus(Base):
+    __tablename__ = "doctor_status"
+
+    status_id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
+    doctor_id: Mapped[int] = mapped_column(BigIntPK, ForeignKey("doctors.doctor_id"), unique=True, nullable=False)
+    status: Mapped[str] = mapped_column(String(12), default="off_duty")
+    note: Mapped[str] = mapped_column(String(200), default="")
+    # FK to tokens added in Phase 4 (Token Engine); plain column until then.
+    current_token_id: Mapped[Optional[int]] = mapped_column(BigIntPK)
+    tokens_served_today: Mapped[int] = mapped_column(default=0)
+    updated_by: Mapped[Optional[int]] = mapped_column(BigIntPK, ForeignKey("users.user_id"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    doctor: Mapped["Doctor"] = relationship(back_populates="presence")
