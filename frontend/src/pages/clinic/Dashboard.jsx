@@ -160,6 +160,7 @@ function Dashboard() {
         {appts.length === 0 ? (
           <p className="py-3 text-[13px] text-slate-400">{loading ? 'Loading…' : 'No appointments today.'}</p>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
               <tr className="text-[12px] font-semibold text-slate-400">
@@ -177,6 +178,7 @@ function Dashboard() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </Card>
     </div>

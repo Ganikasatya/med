@@ -17,7 +17,7 @@ function initialsOf(name = '') {
  * language selector, notifications and the patient profile chip on the right.
  * Backed by the logged-in patient record from PatientContext.
  */
-function PatientTopbar() {
+function PatientTopbar({ onMenu }) {
   const navigate = useNavigate()
   const { patient } = usePatientCtx()
   const { t, lang, setLang } = useI18n()
@@ -48,6 +48,7 @@ function PatientTopbar() {
       <button
         className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-50"
         aria-label="Toggle menu"
+        onClick={onMenu}
       >
         <Menu className="h-5 w-5" />
       </button>

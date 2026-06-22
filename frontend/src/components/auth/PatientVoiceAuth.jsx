@@ -1,15 +1,19 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Phone, ShieldCheck, User, MapPin, Mic, ArrowLeft } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Phone, ShieldCheck, User, MapPin, Mic, ArrowLeft, ArrowDown, Volume2, Sparkles, Square } from 'lucide-react'
 import { Banner } from '../common/FormControls.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { useI18n, LANGS } from '../../i18n/index.jsx'
-import { speak, listen, parseDigits, parseName, sttSupported } from '../../lib/voice.js'
+import { speak, listen, stopSpeaking, parseDigits, parseName, sttSupported } from '../../lib/voice.js'
+import { canRecord, cloudVoiceAvailable, startRecording, transcribe } from '../../lib/voiceAgent.js'
 
 const mobileRe = /^\d{10}$/
 
-/** Input with a mic button that speaks the prompt then captures a spoken answer. */
-function VoiceField({ icon: Icon, label, prompt, value, onChange, kind = 'text', placeholder, maxLength, onVoiceError }) {
+/** Input with a mic button that speaks the prompt then captures a spoken answer.
+ *  When `active` (driven by the guided walkthrough) it shows a pulsing arrow +
+ *  bubble pointing at the field and reflects the guide's speak/listen phase. */
+function VoiceField({ icon: Icon, label, prompt, value, onChange, kind = 'text', placeholder, maxLength, onVoiceError, active = false, bubble, phase = null }) {
   const { speech, t } = useI18n()
   const [listening, setListening] = useState(false)
 
@@ -34,10 +38,42 @@ function VoiceField({ icon: Icon, label, prompt, value, onChange, kind = 'text',
     }
   }
 
+  const micActive = listening || phase === 'listening'
+
   return (
-    <div>
+    <div className="relative">
+      {/* Guide arrow + bubble pointing at this field */}
+      <AnimatePresence>
+        {active && bubble && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            className="mb-1.5 flex items-center gap-2"
+          >
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-blue px-3 py-1 text-[12px] font-semibold text-white shadow-sm">
+              <Volume2 className="h-3.5 w-3.5" />
+              {bubble}
+            </span>
+            <motion.span
+              animate={{ y: [0, 4, 0] }}
+              transition={{ repeat: Infinity, duration: 0.9, ease: 'easeInOut' }}
+              className="text-brand-blue"
+            >
+              <ArrowDown className="h-4 w-4" />
+            </motion.span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <label className="mb-1 block text-[12.5px] font-semibold text-slate-600">{label}</label>
-      <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 focus-within:border-brand-blue focus-within:ring-2 focus-within:ring-brand-blue/10">
+      <div
+        className={`flex items-center gap-2 rounded-xl border bg-white px-3 transition-shadow ${
+          active
+            ? 'border-brand-blue ring-2 ring-brand-blue/30'
+            : 'border-slate-200 focus-within:border-brand-blue focus-within:ring-2 focus-within:ring-brand-blue/10'
+        }`}
+      >
         {Icon && <Icon className="h-4 w-4 shrink-0 text-slate-400" />}
         <input
           value={value}
@@ -52,13 +88,17 @@ function VoiceField({ icon: Icon, label, prompt, value, onChange, kind = 'text',
           onClick={handleMic}
           title={t('auth.tapMic')}
           className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors ${
-            listening ? 'animate-pulse bg-red-500 text-white' : 'bg-brand-blueLight text-brand-blue hover:bg-brand-blue hover:text-white'
+            micActive ? 'animate-pulse bg-red-500 text-white' : 'bg-brand-blueLight text-brand-blue hover:bg-brand-blue hover:text-white'
           }`}
         >
           <Mic className="h-4 w-4" />
         </button>
       </div>
-      {listening && <p className="mt-1 text-[11.5px] font-medium text-brand-blue">{t('auth.listening')}</p>}
+      {(micActive || (active && phase === 'speaking')) && (
+        <p className="mt-1 text-[11.5px] font-medium text-brand-blue">
+          {phase === 'speaking' ? t('guide.speaking') : t('auth.listening')}
+        </p>
+      )}
     </div>
   )
 }
@@ -67,9 +107,15 @@ function VoiceField({ icon: Icon, label, prompt, value, onChange, kind = 'text',
  * Patient login/registration by mobile number + OTP, with optional voice for
  * every field. Demo mode: the OTP comes back in the API response and is shown
  * on screen. The voice language follows the selected UI language.
+ *
+ * Guided walkthrough: when the UI language is Telugu (or the user taps "Voice
+ * guide") an assistant auto-runs — it speaks each prompt, points an animated
+ * arrow at the field, listens, and fills it in, then sends the OTP. All speech
+ * goes through lib/voice.js `speak()`, which uses cloud TTS (Cartesia Sonic) when
+ * configured and the browser voice otherwise.
  */
 function PatientVoiceAuth({ onClose }) {
-  const { t, lang, setLang } = useI18n()
+  const { t, lang, setLang, speech } = useI18n()
   const { requestOtp, loginOtp, registerOtp, homeFor } = useAuth()
   const navigate = useNavigate()
 
@@ -82,6 +128,13 @@ function PatientVoiceAuth({ onClose }) {
   const [banner, setBanner] = useState(null) // { type, msg }
   const [busy, setBusy] = useState(false)
 
+  // Guided walkthrough state
+  const [guideOn, setGuideOn] = useState(false)
+  const [guideField, setGuideField] = useState(null) // 'tab' | 'name' | 'mobile' | 'city' | null
+  const [guidePhase, setGuidePhase] = useState(null) // 'speaking' | 'listening' | null
+  const cancelRef = useRef(false)
+  const autoStarted = useRef(false)
+
   const reset = (m) => { setMode(m); setStep(m === 'register' ? 'details' : 'mobile'); setOtp(''); setBanner(null) }
 
   const finish = (u) => {
@@ -89,35 +142,35 @@ function PatientVoiceAuth({ onClose }) {
     setTimeout(() => { onClose(); navigate(homeFor(u.role_name)) }, 700)
   }
 
-  const sendOtp = async () => {
-    if (!mobileRe.test(phone)) { setBanner({ type: 'error', msg: t('auth.invalidMobile') }); return }
-    if (mode === 'register' && !name.trim()) { setBanner({ type: 'error', msg: t('auth.nameLabel') }); return }
+  // Self-contained OTP request — takes explicit values so the guided runner
+  // never trips over stale React state in its async closure.
+  const submitDetails = useCallback(async ({ phone: p, name: n, register }) => {
+    if (!mobileRe.test(p)) { setBanner({ type: 'error', msg: t('auth.invalidMobile') }); return false }
+    if (register && !n.trim()) { setBanner({ type: 'error', msg: t('auth.nameLabel') }); return false }
     setBusy(true)
     try {
-      const res = await requestOtp(phone)
-      // Mobile-OTP is patient-only: a staff/doctor/admin number can't use it.
-      if (res.is_staff) {
-        setBanner({ type: 'error', msg: t('auth.staffNumber') })
-        return
-      }
-      // Login but the number isn't registered → guide them to register.
-      if (mode === 'login' && res.registered === false) {
+      const res = await requestOtp(p)
+      if (res.is_staff) { setBanner({ type: 'error', msg: t('auth.staffNumber') }); return false }
+      if (!register && res.registered === false) {
         setMode('register'); setStep('details')
         setBanner({ type: 'error', msg: t('auth.notRegistered') })
-        return
+        return false
       }
-      // Register but the number already exists → just log them in.
-      if (mode === 'register' && res.registered === true) setMode('login')
+      if (register && res.registered === true) setMode('login')
       setStep('otp')
-      const msg = t('auth.otpSentDemo', { phone, otp: res.dev_otp || '------' })
-      setBanner({ type: 'success', msg })
-      speak(t('auth.otpPrompt'), LANGS[lang].speech)
+      setBanner({ type: 'success', msg: t('auth.otpSentDemo', { phone: p, otp: res.dev_otp || '------' }) })
+      return true
     } catch (e) {
       setBanner({ type: 'error', msg: e.message || 'Could not send OTP' })
+      return false
     } finally {
       setBusy(false)
     }
-  }
+  }, [requestOtp, t])
+
+  const sendOtp = () => submitDetails({ phone, name, register: mode === 'register' }).then((ok) => {
+    if (ok) speak(t('auth.otpPrompt'), speech)
+  })
 
   const verify = async () => {
     if (otp.length < 4) { setBanner({ type: 'error', msg: t('auth.otpLabel') }); return }
@@ -133,6 +186,134 @@ function PatientVoiceAuth({ onClose }) {
       setBusy(false)
     }
   }
+
+  // ----------------------------------------------------------- guided runner --
+  const stopGuide = useCallback(() => {
+    cancelRef.current = true
+    stopSpeaking()
+    setGuideOn(false)
+    setGuideField(null)
+    setGuidePhase(null)
+  }, [])
+
+  const runGuide = useCallback(async () => {
+    cancelRef.current = false
+    const cloudListening = await cloudVoiceAvailable()
+    if (lang === 'te' && !cloudListening) {
+      setGuideOn(false)
+      setGuideField(null)
+      setGuidePhase(null)
+      setBanner({ type: 'error', msg: t('guide.listenUnavailable') })
+      return
+    }
+    if (!cloudListening && !sttSupported()) {
+      setGuideOn(false)
+      setGuideField(null)
+      setGuidePhase(null)
+      setBanner({ type: 'error', msg: t('auth.voiceUnsupported') })
+      return
+    }
+    setGuideOn(true)
+    setMode('register')
+    setStep('details')
+    setBanner({ type: 'success', msg: t('guide.running') })
+
+    const cancelled = () => cancelRef.current
+    const say = async (key) => {
+      if (cancelled()) return
+      setGuidePhase('speaking')
+      await speak(t(key), speech)
+      setGuidePhase(null)
+    }
+    const hear = async (parse, ms = 8000) => {
+      if (cancelled()) return ''
+      setGuidePhase('listening')
+      try {
+        if (cloudListening && canRecord()) {
+          const recorder = await startRecording()
+          await new Promise((resolve) => setTimeout(resolve, ms))
+          const blob = await recorder.stop()
+          if (blob.size < 1000) {
+            setBanner({ type: 'error', msg: `Microphone recorded almost no audio (${blob.size} bytes). Check Windows/browser input device, then try again.` })
+            return ''
+          }
+          const tr = await transcribe(blob, lang)
+          const parsed = parse ? parse(tr) : (tr || '').trim()
+          if (tr) setBanner({ type: 'success', msg: `Heard: ${tr}` })
+          if (!parsed) setBanner({ type: 'error', msg: tr ? `Heard but could not use it: ${tr}` : t('guide.didntHear') })
+          return parsed
+        }
+        if (!sttSupported()) return ''
+        const tr = await listen(speech)
+        const parsed = parse ? parse(tr) : (tr || '').trim()
+        if (tr) setBanner({ type: 'success', msg: `Heard: ${tr}` })
+        if (!parsed) setBanner({ type: 'error', msg: tr ? `Heard but could not use it: ${tr}` : t('guide.didntHear') })
+        return parsed
+      } catch (e) {
+        setBanner({ type: 'error', msg: `Listening failed: ${e?.message || 'check backend /voice/transcribe and microphone permission'}` })
+        return ''
+      } finally {
+        setGuidePhase(null)
+      }
+    }
+
+    // 0) Welcome + point at the Register tab ("sign up here").
+    setGuideField('tab')
+    await say('guide.welcome')
+    if (cancelled()) return stopGuide()
+
+    // 1) Name — speak, listen, fill (one retry).
+    setGuideField('name')
+    let collectedName = ''
+    for (let i = 0; i < 2 && !collectedName && !cancelled(); i += 1) {
+      await say(i === 0 ? 'guide.namePrompt' : 'guide.retry')
+      const v = await hear(parseName)
+      if (v) { collectedName = v; setName(v); await say('guide.gotIt') }
+    }
+    if (cancelled()) return stopGuide()
+
+    // 2) Mobile — need 10 digits (one retry).
+    setGuideField('mobile')
+    let collectedPhone = ''
+    for (let i = 0; i < 2 && collectedPhone.length < 10 && !cancelled(); i += 1) {
+      await say(i === 0 ? 'guide.mobilePrompt' : 'guide.retry')
+      const v = await hear((tr) => parseDigits(tr).slice(0, 10), 10000)
+      if (v) { collectedPhone = v; setPhone(v) }
+      if (v.length === 10) await say('guide.gotIt')
+    }
+    if (cancelled()) return stopGuide()
+
+    // 3) City — optional, single try.
+    setGuideField('city')
+    await say('guide.cityPrompt')
+    const c = await hear((tr) => parseName(tr))
+    if (c) setCity(c)
+    if (cancelled()) return stopGuide()
+
+    // 4) Send the OTP automatically if we have a valid number.
+    setGuideField(null)
+    if (mobileRe.test(collectedPhone) && collectedName.trim()) {
+      await say('guide.sendingOtp')
+      const ok = await submitDetails({ phone: collectedPhone, name: collectedName, register: true })
+      if (ok && !cancelled()) await say('auth.otpPrompt')
+    }
+    setGuideOn(false)
+    setGuidePhase(null)
+  }, [speech, t, submitDetails, stopGuide])
+
+  // Auto-launch the guide once when the language is Telugu.
+  useEffect(() => {
+    if (lang === 'te' && !autoStarted.current && (sttSupported() || canRecord())) {
+      autoStarted.current = true
+      const id = setTimeout(() => runGuide(), 450)
+      return () => clearTimeout(id)
+    }
+  }, [lang, runGuide])
+
+  // Stop any narration if the modal unmounts.
+  useEffect(() => () => stopSpeaking(), [])
+
+  const guideTarget = (f) => guideOn && guideField === f
 
   return (
     <div className="space-y-3">
@@ -152,10 +333,41 @@ function PatientVoiceAuth({ onClose }) {
         ))}
       </div>
 
+      {/* Guided voice walkthrough control */}
+      <button
+        type="button"
+        onClick={() => (guideOn ? stopGuide() : runGuide())}
+        className={`flex w-full items-center justify-center gap-2 rounded-xl border py-2 text-[13px] font-semibold transition-colors ${
+          guideOn
+            ? 'border-red-200 bg-red-50 text-red-600 hover:bg-red-100'
+            : 'border-brand-blue/30 bg-brand-blueLight text-brand-blue hover:bg-brand-blue hover:text-white'
+        }`}
+      >
+        {guideOn ? <Square className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
+        {guideOn ? t('guide.stop') : t('guide.start')}
+      </button>
+
       {/* Login / Register toggle */}
       <div className="flex gap-1 rounded-xl bg-slate-100 p-1">
         <button type="button" onClick={() => reset('login')} className={`flex-1 rounded-lg py-2 text-sm font-semibold ${mode === 'login' ? 'bg-brand-blue text-white shadow-sm' : 'text-slate-500'}`}>{t('auth.loginTab')}</button>
-        <button type="button" onClick={() => reset('register')} className={`flex-1 rounded-lg py-2 text-sm font-semibold ${mode === 'register' ? 'bg-brand-blue text-white shadow-sm' : 'text-slate-500'}`}>{t('auth.signupTab')}</button>
+        <button
+          type="button"
+          onClick={() => reset('register')}
+          className={`relative flex-1 rounded-lg py-2 text-sm font-semibold transition-shadow ${
+            mode === 'register' ? 'bg-brand-blue text-white shadow-sm' : 'text-slate-500'
+          } ${guideTarget('tab') ? 'ring-2 ring-brand-blue ring-offset-1' : ''}`}
+        >
+          {t('auth.signupTab')}
+          {guideTarget('tab') && (
+            <motion.span
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-brand-blue px-2.5 py-0.5 text-[11px] font-semibold text-white shadow-sm"
+            >
+              {t('guide.signupHere')}
+            </motion.span>
+          )}
+        </button>
       </div>
 
       {banner && <Banner type={banner.type}>{banner.msg}</Banner>}
@@ -163,11 +375,11 @@ function PatientVoiceAuth({ onClose }) {
       {step !== 'otp' ? (
         <>
           {mode === 'register' && (
-            <VoiceField icon={User} kind="name" label={t('auth.nameLabel')} prompt={t('auth.namePrompt')} value={name} onChange={setName} placeholder={t('auth.nameLabel')} onVoiceError={(m) => setBanner({ type: 'error', msg: m })} />
+            <VoiceField icon={User} kind="name" label={t('auth.nameLabel')} prompt={t('auth.namePrompt')} value={name} onChange={setName} placeholder={t('auth.nameLabel')} onVoiceError={(m) => setBanner({ type: 'error', msg: m })} active={guideTarget('name')} bubble={t('guide.nameBubble')} phase={guideTarget('name') ? guidePhase : null} />
           )}
-          <VoiceField icon={Phone} kind="digits" maxLength={10} label={t('auth.mobileLabel')} prompt={t('auth.mobilePrompt')} value={phone} onChange={setPhone} placeholder="9876543210" onVoiceError={(m) => setBanner({ type: 'error', msg: m })} />
+          <VoiceField icon={Phone} kind="digits" maxLength={10} label={t('auth.mobileLabel')} prompt={t('auth.mobilePrompt')} value={phone} onChange={setPhone} placeholder="9876543210" onVoiceError={(m) => setBanner({ type: 'error', msg: m })} active={guideTarget('mobile')} bubble={t('guide.mobileBubble')} phase={guideTarget('mobile') ? guidePhase : null} />
           {mode === 'register' && (
-            <VoiceField icon={MapPin} kind="text" label={t('auth.cityLabel')} prompt={t('auth.cityLabel')} value={city} onChange={setCity} placeholder={t('auth.cityLabel')} onVoiceError={(m) => setBanner({ type: 'error', msg: m })} />
+            <VoiceField icon={MapPin} kind="text" label={t('auth.cityLabel')} prompt={t('auth.cityLabel')} value={city} onChange={setCity} placeholder={t('auth.cityLabel')} onVoiceError={(m) => setBanner({ type: 'error', msg: m })} active={guideTarget('city')} bubble={t('guide.cityBubble')} phase={guideTarget('city') ? guidePhase : null} />
           )}
           <button type="button" disabled={busy} onClick={sendOtp} className="w-full rounded-xl bg-brand-blue py-3 text-sm font-semibold text-white transition-colors hover:bg-brand-blueDark disabled:opacity-60">
             {t('auth.sendOtp')}

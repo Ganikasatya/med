@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Mic, Square, Volume2, ArrowLeft, CheckCircle2, Stethoscope,
-  CalendarDays, Clock, Sparkles, RotateCcw, Loader2, Languages, BadgeCheck,
+  CalendarDays, Clock, Sparkles, RotateCcw, Loader2, Languages, BadgeCheck, Info,
 } from 'lucide-react'
 import { Card, PageHeading } from '../../components/clinic/ui.jsx'
 import { usePatientCtx } from '../../context/PatientContext.jsx'
@@ -12,11 +12,11 @@ import { prettyTime, prettyDate, todayISO, clockIST } from '../../lib/format.js'
 import { speak, stopSpeaking, ttsSupported } from '../../lib/voice.js'
 import {
   canRecord, cloudVoiceAvailable, startRecording, transcribe, listenOnce,
-  interpretChoice, interpretDate, interpretYesNo, speechCode,
+  interpretChoice, interpretDate, interpretYesNo, speechCode, cloudTtsAvailable,
 } from '../../lib/voiceAgent.js'
 import { getCurrentPosition, travelMinutesBetween } from '../../lib/geo.js'
 
-const STEPS = ['symptom', 'doctor', 'date', 'slot', 'confirm']
+const STEPS = ['symptom', 'preference', 'particular', 'location', 'doctor', 'date', 'slot', 'confirm']
 
 const SYMPTOM_SPECIALTIES = [
   { specialty: ['dentist', 'dental', 'orthodont', 'oral'], symptoms: ['tooth', 'teeth', 'gum', 'jaw', 'cavity', 'dental', 'toothache', 'tooth ache', 'pallu', 'పంటి', 'పళ్ళు', 'దంత', 'दांत', 'दाँत', 'मसूड़ा'] },
@@ -31,6 +31,11 @@ const SYMPTOM_SPECIALTIES = [
 ]
 
 const norm = (value) => String(value || '').toLowerCase()
+
+const locationOf = (affiliation, resolveHospital) => {
+  const hospital = affiliation?.hospital_id ? resolveHospital(affiliation.hospital_id) : null
+  return affiliation?.city || hospital?.city || ''
+}
 
 function rankDoctorsForSymptom(text, doctors, clinicNameOf) {
   const complaint = norm(text)
@@ -53,33 +58,6 @@ function rankDoctorsForSymptom(text, doctors, clinicNameOf) {
     .map((item) => item.doctor)
 }
 
-const TE_SPOKEN_PROMPTS = {
-  'vbook.askSymptom': 'Namaste. Cheppandi, mee samasya enti? Udaharanaku fever, cough, leda stomach pain.',
-  'vbook.askDoctor': 'Mee kosam ee doctors dorikaru. Evaru kavali? Peru cheppandi, leda first, second ani cheppandi.',
-  'vbook.askDate': 'Ye roju kavali? Ee roju leda repu ani cheppavachu.',
-  'vbook.askSlot': 'Ee times available unnayi. Ye time meeku suit avutundi?',
-  'vbook.booking': 'Mee appointment book chestunnanu.',
-  'vbook.noDoctors': 'Sorry, daniki doctor dorakaledu. Malli try cheddam.',
-  'vbook.noSlots': 'Aa roju slots levu. Inko roju select cheyyandi.',
-  'vbook.bookFailed': 'Sorry, booking complete avvaledu. Malli try cheyyandi.',
-  'vbook.doneTitle': 'Done. Mee token book ayyindi.',
-  'vbook.didntCatch': 'Sorry, naku ardam kaaledu. Dayachesi malli cheppandi.',
-}
-
-function teluguSpokenFallback(text, t) {
-  const found = Object.entries(TE_SPOKEN_PROMPTS).find(([key]) => t(key) === text)
-  return found ? found[1] : ''
-}
-
-function teConfirmSpoken({ doctor, date, time }) {
-  return `${doctor} daggara ${date} na ${time} ki book cheyyala? Confirm cheyyadaniki yes ani cheppandi.`
-}
-
-function teDoneSpoken({ token, leave }) {
-  return `Anta complete ayyindi. Mee token number ${token}. Dayachesi ${leave} kalla inti nundi bayaluderandi.`
-}
-
-/** Build the next `n` dates as { iso, label } chips for the date step. */
 function nextDays(n, t) {
   const out = []
   const base = new Date(`${todayISO()}T00:00:00`)
@@ -106,9 +84,13 @@ function BookByVoice() {
   const [heard, setHeard] = useState('')
   const [hint, setHint] = useState('') // small helper line (e.g. "didn't catch that")
   const [cloud, setCloud] = useState(false)
+  const [cloudTts, setCloudTts] = useState(false) // Cartesia voices available
 
   // Selections gathered across the flow.
   const [doctorShortlist, setDoctorShortlist] = useState([])
+  const [symptomDoctors, setSymptomDoctors] = useState([])
+  const [preferredDoctors, setPreferredDoctors] = useState([])
+  const [selectedLocation, setSelectedLocation] = useState('')
   const [doctorId, setDoctorId] = useState('')
   const [affiliationId, setAffiliationId] = useState('')
   const [date, setDate] = useState('')
@@ -132,28 +114,40 @@ function BookByVoice() {
     ? { ...affiliation, latitude: affiliation.latitude, longitude: affiliation.longitude }
     : clinic
   const clinicNameOf = useCallback((d) => resolveHospital(d?.hospital_id)?.name || '', [resolveHospital])
+  const affiliationsOf = useCallback((d) => affiliationsByDoctor[d?.doctor_id] || [], [affiliationsByDoctor])
+  const doctorLocations = useCallback((d) => {
+    const values = affiliationsOf(d).map((a) => locationOf(a, resolveHospital)).filter(Boolean)
+    const hospitalCity = resolveHospital(d?.hospital_id)?.city
+    if (hospitalCity) values.push(hospitalCity)
+    return [...new Set(values)]
+  }, [affiliationsOf, resolveHospital])
+  const availableLocations = useMemo(() => {
+    const source = preferredDoctors.length ? preferredDoctors : symptomDoctors
+    return [...new Set(source.flatMap(doctorLocations))].sort((a, b) => a.localeCompare(b))
+  }, [doctorLocations, preferredDoctors, symptomDoctors])
   const docLabel = useCallback((d) => {
     const clinicName = clinicNameOf(d)
-    return `${d.name} - ${d.specialization}${clinicName ? `, ${clinicName}` : ''}`
-  }, [clinicNameOf])
+    const city = doctorLocations(d)[0]
+    return `${d.name} - ${d.specialization}${clinicName ? `, ${clinicName}` : ''}${city ? `, ${city}` : ''}`
+  }, [clinicNameOf, doctorLocations])
 
   // Probe cloud voice once, and quietly try to get the patient's location so the
   // leave-by reminder can be computed (non-blocking; failure is fine).
   useEffect(() => {
     cloudVoiceAvailable().then(setCloud)
+    cloudTtsAvailable().then(setCloudTts)
     getCurrentPosition().then((p) => { originRef.current = p }).catch(() => {})
     return () => stopSpeaking()
   }, [])
 
-  // -- Speak a prompt in the chosen language (no-op if TTS missing). ----------
-  const say = useCallback(async (text, fallbackText = '') => {
+  // -- Speak a prompt in the chosen language. `speak()` prefers Cartesia and,
+  //    for Telugu, never falls back to English/romanized browser narration.
+  const say = useCallback(async (text) => {
     if (!text) return
     setPhase('speaking')
-    await speak(text, speechCode(lang), {
-      fallbackText: lang === 'te' ? fallbackText || teluguSpokenFallback(text, t) : '',
-    })
+    await speak(text, speechCode(lang))
     setPhase('idle')
-  }, [lang, t])
+  }, [lang])
 
   // -- Capture one spoken reply, cloud (push-to-talk) or browser (auto-stop). --
   const captureSpeech = useCallback(async () => {
@@ -194,34 +188,95 @@ function BookByVoice() {
     if (!options.length) { setHint(t('vbook.noDoctors')); setPhase('idle'); return }
     const symptomMatches = rankDoctorsForSymptom(text, bookableDoctors, clinicNameOf)
     if (symptomMatches.length) {
-      setDoctorShortlist(symptomMatches.slice(0, 6))
-      setStep('doctor')
-      await say(t('vbook.askDoctor'))
+      setSymptomDoctors(symptomMatches)
+      setPreferredDoctors(symptomMatches)
+      setStep('preference')
+      await say(t('vbook.askPreference'))
       return
     }
     const { id } = await interpretChoice(
       text, lang, options,
       'The text is the patient\'s complaint/symptom. Choose the doctor whose specialization best treats it; prefer a General Physician for general complaints.',
     )
-    // Shortlist: matched doctor first, then a couple of alternatives to tap.
     const matched = id ? bookableDoctors.find((d) => String(d.doctor_id) === id) : null
-    const rest = bookableDoctors.filter((d) => String(d.doctor_id) !== id).slice(0, matched ? 5 : 6)
-    const shortlist = matched ? [matched, ...rest] : rest
+    if (!matched) { setHint(t('vbook.noDoctors')); setPhase('idle'); return }
+    setSymptomDoctors([matched])
+    setPreferredDoctors([matched])
+    setStep('preference')
+    await say(t('vbook.askPreference'))
+  }, [bookableDoctors, clinicNameOf, docLabel, lang, say, t])
+
+  const handlePreference = useCallback(async (text) => {
+    const options = [
+      { id: 'suitable', label: t('vbook.findSuitable') },
+      { id: 'particular', label: t('vbook.particularDoctor') },
+    ]
+    const { id } = await interpretChoice(text, lang, options, 'Choose whether the patient wants a particular doctor or clinic, or wants us to find a suitable doctor.')
+    if (!id) { setHint(t('vbook.didntCatch')); await say(t('vbook.askPreference')); return }
+    if (id === 'particular') {
+      setStep('particular')
+      await say(t('vbook.askParticular'))
+      return
+    }
+    setPreferredDoctors(symptomDoctors)
+    setStep('location')
+    await say(t('vbook.askLocation'))
+  }, [lang, say, symptomDoctors, t])
+
+  const handleParticular = useCallback(async (text) => {
+    const wanted = norm(text).trim()
+    const matches = symptomDoctors.filter((d) => {
+      const hospital = resolveHospital(d.hospital_id)
+      const terms = [d.name, hospital?.name, ...affiliationsOf(d).map((a) => a.name)]
+        .map(norm).filter((term) => term.length >= 2)
+      return terms.some((term) => wanted.includes(term) || term.includes(wanted))
+    })
+    setPreferredDoctors(matches.length ? matches : symptomDoctors)
+    if (!matches.length) {
+      setHint(t('vbook.noParticular'))
+      await say(t('vbook.noParticular'))
+    }
+    setStep('location')
+    await say(t('vbook.askLocation'))
+  }, [affiliationsOf, resolveHospital, say, symptomDoctors, t])
+
+  const handleLocation = useCallback(async (text) => {
+    const source = preferredDoctors.length ? preferredDoctors : symptomDoctors
+    const options = availableLocations.map((city) => ({ id: city, label: city }))
+    const { id } = await interpretChoice(text, lang, options, 'Pick the city or locality where the patient wants the check-up.')
+    const requested = id || text.trim()
+    if (!requested) { setHint(t('vbook.didntCatch')); await say(t('vbook.askLocation')); return }
+    setSelectedLocation(requested)
+    const local = source.filter((d) => doctorLocations(d).some((city) => {
+      const a = norm(city); const b = norm(requested)
+      return a === b || a.includes(b) || b.includes(a)
+    }))
+    const shortlist = (local.length ? local : source).slice(0, 6)
     setDoctorShortlist(shortlist)
     setStep('doctor')
+    if (!local.length) {
+      setHint(t('vbook.noDoctorsInLocation', { location: requested }))
+      await say(t('vbook.noDoctorsInLocation', { location: requested }))
+    }
     await say(t('vbook.askDoctor'))
-  }, [bookableDoctors, clinicNameOf, docLabel, lang, say, t])
+  }, [availableLocations, doctorLocations, lang, preferredDoctors, say, symptomDoctors, t])
+
+  const selectDoctor = useCallback(async (id) => {
+    setDoctorId(String(id))
+    const doctorAffiliations = affiliationsByDoctor[id] || []
+    const locationMatch = doctorAffiliations.find((a) => norm(locationOf(a, resolveHospital)) === norm(selectedLocation))
+    const selectedAffiliation = locationMatch || doctorAffiliations[0]
+    setAffiliationId(selectedAffiliation ? String(selectedAffiliation.affiliation_id) : '')
+    setStep('date')
+    await say(t('vbook.askDate'))
+  }, [affiliationsByDoctor, resolveHospital, say, selectedLocation, t])
 
   const handleDoctor = useCallback(async (text) => {
     const options = doctorShortlist.map((d) => ({ id: String(d.doctor_id), label: docLabel(d) }))
     const { id } = await interpretChoice(text, lang, options, 'Pick the doctor the patient chose.')
     if (!id) { setHint(t('vbook.didntCatch')); await say(t('vbook.askDoctor')); return }
-    setDoctorId(id)
-    const firstAffiliation = affiliationsByDoctor[id]?.[0]
-    setAffiliationId(firstAffiliation ? String(firstAffiliation.affiliation_id) : '')
-    setStep('date')
-    await say(t('vbook.askDate'))
-  }, [affiliationsByDoctor, doctorShortlist, docLabel, lang, say, t])
+    await selectDoctor(id)
+  }, [doctorShortlist, docLabel, lang, say, selectDoctor, t])
 
   const loadSlots = useCallback(async (iso) => {
     setPhase('thinking')
@@ -259,7 +314,7 @@ function BookByVoice() {
     setSlotTime(id)
     setStep('confirm')
     const details = { doctor: doctorsById[doctorId]?.name || '', date: prettyDate(date), time: prettyTime(id) }
-    await say(t('vbook.confirm', details), teConfirmSpoken(details))
+    await say(t('vbook.confirm', details))
   }, [slots, lang, date, doctorId, doctorsById, say, t])
 
   const doBooking = useCallback(async () => {
@@ -277,7 +332,7 @@ function BookByVoice() {
         slot_time: slotTime,
         appointment_type: 'regular',
         notes: symptom || 'Booked by voice assistant',
-        source: 'voice',
+        source: 'app',
         origin_lat: origin?.lat ?? null,
         origin_lng: origin?.lng ?? null,
         origin_label: origin ? 'Voice booking location' : '',
@@ -289,10 +344,7 @@ function BookByVoice() {
       const tokenNo = est?.token_number || est?.display_code || ''
       setResult({ tokenNo, leaveBy, doctorName: doctorsById[doctorId]?.name || '' })
       setStep('done')
-      await say(
-        leaveBy ? t('vbook.doneSpoken', { token: tokenNo, leave: leaveBy }) : t('vbook.doneTitle'),
-        leaveBy ? teDoneSpoken({ token: tokenNo, leave: leaveBy }) : '',
-      )
+      await say(leaveBy ? t('vbook.doneSpoken', { token: tokenNo, leave: leaveBy }) : t('vbook.doneTitle'))
     } catch {
       setHint(t('vbook.bookFailed'))
       setStep('confirm')
@@ -318,11 +370,14 @@ function BookByVoice() {
     setHeard(text)
     if (!text) { setPhase('idle'); setHint(t('vbook.didntCatch')); return }
     if (step === 'symptom') return handleSymptom(text)
+    if (step === 'preference') return handlePreference(text)
+    if (step === 'particular') return handleParticular(text)
+    if (step === 'location') return handleLocation(text)
     if (step === 'doctor') return handleDoctor(text)
     if (step === 'date') return handleDate(text)
     if (step === 'slot') return handleSlot(text)
     if (step === 'confirm') return handleConfirm(text)
-  }, [step, handleSymptom, handleDoctor, handleDate, handleSlot, handleConfirm, t])
+  }, [step, handleSymptom, handlePreference, handleParticular, handleLocation, handleDoctor, handleDate, handleSlot, handleConfirm, t])
 
   // Mic button: in cloud push-to-talk mode the same button starts then stops.
   const onMic = useCallback(async () => {
@@ -331,12 +386,18 @@ function BookByVoice() {
   }, [captureSpeech, dispatch])
 
   // Tapping an option is the always-available fallback to speaking.
-  const pickDoctor = (id) => async () => { setHeard(''); setDoctorId(String(id)); setStep('date'); await say(t('vbook.askDate')) }
+  const pickPreference = (id) => async () => {
+    setHeard('')
+    if (id === 'particular') { setStep('particular'); await say(t('vbook.askParticular')); return }
+    setPreferredDoctors(symptomDoctors); setStep('location'); await say(t('vbook.askLocation'))
+  }
+  const pickLocation = (city) => async () => { setHeard(''); await handleLocation(city) }
+  const pickDoctor = (id) => async () => { setHeard(''); await selectDoctor(id) }
   const pickDate = (iso) => async () => { setHeard(''); setDate(iso); await loadSlots(iso) }
   const pickSlot = (time) => async () => {
     setHeard(''); setSlotTime(time); setStep('confirm')
     const details = { doctor: doctorsById[doctorId]?.name || '', date: prettyDate(date), time: prettyTime(time) }
-    await say(t('vbook.confirm', details), teConfirmSpoken(details))
+    await say(t('vbook.confirm', details))
   }
 
   const begin = async () => {
@@ -347,17 +408,19 @@ function BookByVoice() {
 
   const restart = () => {
     setStarted(false); setStep('symptom'); setHeard(''); setHint(''); setResult(null)
-    setDoctorId(''); setDate(''); setSlots([]); setSlotTime(''); setDoctorShortlist([]); setSymptom('')
+    setDoctorId(''); setAffiliationId(''); setDate(''); setSlots([]); setSlotTime(''); setDoctorShortlist([])
+    setSymptomDoctors([]); setPreferredDoctors([]); setSelectedLocation(''); setSymptom('')
   }
 
   const replay = () => {
     const prompt = {
-      symptom: 'vbook.askSymptom', doctor: 'vbook.askDoctor', date: 'vbook.askDate',
+      symptom: 'vbook.askSymptom', preference: 'vbook.askPreference', particular: 'vbook.askParticular',
+      location: 'vbook.askLocation', doctor: 'vbook.askDoctor', date: 'vbook.askDate',
       slot: 'vbook.askSlot',
     }[step]
     if (step === 'confirm') {
       const details = { doctor: doctorsById[doctorId]?.name || '', date: prettyDate(date), time: prettyTime(slotTime) }
-      say(t('vbook.confirm', details), teConfirmSpoken(details))
+      say(t('vbook.confirm', details))
     } else if (prompt) say(t(prompt))
   }
 
@@ -398,12 +461,27 @@ function BookByVoice() {
             ))}
           </div>
           <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11.5px] font-bold ${
-            cloud ? 'bg-green-50 text-green-700' : 'bg-slate-100 text-slate-500'
+            cloud || cloudTts ? 'bg-green-50 text-green-700' : 'bg-slate-100 text-slate-500'
           }`}>
             <BadgeCheck className="h-3.5 w-3.5" />
-            {cloud ? t('vbook.voiceHigh') : t('vbook.voiceOnDevice')}
+            {cloud || cloudTts ? t('vbook.voiceHigh') : t('vbook.voiceOnDevice')}
           </span>
         </div>
+
+        {/* Telugu voice usage instructions — shown only when Telugu is selected. */}
+        {lang === 'te' && (
+          <div className="mb-5 rounded-2xl border border-brand-blue/15 bg-brand-blueLight/40 p-4">
+            <p className="mb-2 flex items-center gap-2 text-[14px] font-extrabold text-brand-navy">
+              <Info className="h-4 w-4 text-brand-blue" /> {t('vbook.guideTitle')}
+            </p>
+            <ol className="list-decimal space-y-1.5 pl-6 text-[13.5px] leading-relaxed text-slate-600">
+              <li>{t('vbook.guideStep1')}</li>
+              <li>{t('vbook.guideStep2')}</li>
+              <li>{t('vbook.guideStep3')}</li>
+              <li>{t('vbook.guideStep4')}</li>
+            </ol>
+          </div>
+        )}
 
         {!started ? (
           // ---- Intro / start ----
@@ -507,9 +585,12 @@ function BookByVoice() {
               step={step}
               t={t}
               doctorShortlist={doctorShortlist}
+              locations={availableLocations}
               docLabel={docLabel}
               days={nextDays(5, t)}
               slots={slots}
+              pickPreference={pickPreference}
+              pickLocation={pickLocation}
               pickDoctor={pickDoctor}
               pickDate={pickDate}
               pickSlot={pickSlot}
@@ -526,6 +607,9 @@ function BookByVoice() {
 // The prompt text shown for the current step (kept out of JSX for clarity).
 function currentPromptText(step, t, ctx) {
   if (step === 'symptom') return t('vbook.askSymptom')
+  if (step === 'preference') return t('vbook.askPreference')
+  if (step === 'particular') return t('vbook.askParticular')
+  if (step === 'location') return t('vbook.askLocation')
   if (step === 'doctor') return t('vbook.askDoctor')
   if (step === 'date') return t('vbook.askDate')
   if (step === 'slot') return t('vbook.askSlot')
@@ -540,8 +624,37 @@ function currentPromptText(step, t, ctx) {
   return ''
 }
 
-function Options({ step, t, doctorShortlist, docLabel, days, slots, pickDoctor, pickDate, pickSlot, onConfirmYes, onConfirmNo }) {
+function Options({ step, t, doctorShortlist, locations, docLabel, days, slots, pickPreference, pickLocation, pickDoctor, pickDate, pickSlot, onConfirmYes, onConfirmNo }) {
   const grid = 'grid grid-cols-1 gap-2 sm:grid-cols-2'
+  if (step === 'preference') {
+    return (
+      <div>
+        <p className='mb-2 text-[12.5px] font-semibold text-slate-400'>{t('vbook.orTap')}</p>
+        <div className={grid}>
+          <button onClick={pickPreference('suitable')} className='rounded-xl border border-slate-200 bg-white p-3 text-left text-[14px] font-bold text-brand-navy'>
+            {t('vbook.findSuitable')}
+          </button>
+          <button onClick={pickPreference('particular')} className='rounded-xl border border-slate-200 bg-white p-3 text-left text-[14px] font-bold text-brand-navy'>
+            {t('vbook.particularDoctor')}
+          </button>
+        </div>
+      </div>
+    )
+  }
+  if (step === 'location' && locations.length) {
+    return (
+      <div>
+        <p className='mb-2 text-[12.5px] font-semibold text-slate-400'>{t('vbook.orTap')}</p>
+        <div className='flex flex-wrap gap-2'>
+          {locations.map((city) => (
+            <button key={city} onClick={pickLocation(city)} className='rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[14px] font-bold text-brand-navy'>
+              {city}
+            </button>
+          ))}
+        </div>
+      </div>
+    )
+  }
   if (step === 'doctor' && doctorShortlist.length) {
     return (
       <div>

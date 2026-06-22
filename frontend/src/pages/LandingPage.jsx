@@ -7,6 +7,7 @@ import LifelineBanner from '../components/landing/LifelineBanner.jsx'
 import TestimonialCard from '../components/landing/TestimonialCard.jsx'
 import AppDownloadBanner from '../components/landing/AppDownloadBanner.jsx'
 import JourneySection from '../components/landing/JourneySection.jsx'
+import LandingGuide from '../components/landing/LandingGuide.jsx'
 import { AuthModalProvider } from '../context/AuthModalContext.jsx'
 
 /**
@@ -20,15 +21,16 @@ import { AuthModalProvider } from '../context/AuthModalContext.jsx'
 function LandingPage() {
   return (
     <AuthModalProvider>
-    <div className="h-screen w-screen overflow-y-auto bg-gradient-to-b from-brand-blueLight via-white to-white">
+    <div className="h-screen w-full overflow-x-hidden overflow-y-auto bg-gradient-to-b from-brand-blueLight via-white to-white">
       <Navbar />
+      <LandingGuide />
 
       {/* Screen 1: hero fills the rest of the viewport (navbar is h-20 = 5rem) */}
       <div className="flex min-h-[calc(100vh-5rem)] flex-col">
-        <div className="flex flex-1">
+        <div className="flex flex-1 flex-col lg:flex-row">
           <CalculatorSidebar />
 
-          <main className="flex flex-1 flex-col gap-8 pb-12">
+          <main className="order-first flex flex-1 flex-col gap-8 pb-12 lg:order-none">
             <HeroSection />
             <FeatureCards />
 
@@ -36,7 +38,7 @@ function LandingPage() {
             <LifelineBanner />
 
             {/* How it works + Testimonial */}
-            <div className="flex flex-1 items-stretch gap-6 px-8 pt-4">
+            <div className="flex flex-1 flex-col items-stretch gap-6 px-4 pt-4 sm:px-8 lg:flex-row">
               <div className="flex flex-[1.9] items-start">
                 <HowItWorks />
               </div>

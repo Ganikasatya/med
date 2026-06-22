@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Building2, ChevronDown, Bell } from 'lucide-react'
+import { Building2, ChevronDown, Bell, Menu } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { hospitalsApi } from '../../api'
 import { Avatar } from './ui.jsx'
@@ -12,7 +12,7 @@ const ROLE_LABELS = {
 }
 
 /** Top bar: clinic name (left) + notifications & admin (right) — from real data. */
-function ClinicTopbar() {
+function ClinicTopbar({ onMenu }) {
   const { user } = useAuth()
   const [clinic, setClinic] = useState(null)
 
@@ -29,6 +29,13 @@ function ClinicTopbar() {
   return (
     <header className="flex shrink-0 items-center justify-between border-b border-slate-100 bg-white px-6 py-3">
       {/* Clinic name */}
+      <button
+        className="mr-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-50 lg:hidden"
+        aria-label="Toggle menu"
+        onClick={onMenu}
+      >
+        <Menu className="h-5 w-5" />
+      </button>
       <div className="flex items-center gap-2.5 rounded-xl px-2 py-1.5">
         <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-blueLight text-brand-blue">
           <Building2 className="h-5 w-5" />

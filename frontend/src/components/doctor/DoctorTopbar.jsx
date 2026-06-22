@@ -14,7 +14,7 @@ function initialsOf(name = '') {
  * Doctor console top bar: menu toggle (decorative for now) + centered title,
  * with notifications, calendar and the doctor profile chip on the right.
  */
-function DoctorTopbar() {
+function DoctorTopbar({ onMenu }) {
   const navigate = useNavigate()
   const { doctor } = useDoctorCtx()
   const [unread, setUnread] = useState(0)
@@ -40,6 +40,7 @@ function DoctorTopbar() {
         <button
           className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-50"
           aria-label="Toggle menu"
+          onClick={onMenu}
         >
           <Menu className="h-5 w-5" />
         </button>

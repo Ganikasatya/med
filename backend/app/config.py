@@ -55,6 +55,28 @@ class Settings(BaseSettings):
     openai_stt_model: str = "whisper-1"
     openai_nlu_model: str = "gpt-4o-mini"
 
+    # --- Speech-to-text provider ---
+    # "openai" uses Whisper via OPENAI_API_KEY. "deepgram" uses Deepgram Nova.
+    stt_provider: str = "openai"
+    deepgram_api_key: str = ""
+    deepgram_base_url: str = "https://api.deepgram.com"
+    deepgram_model: str = "nova-3"
+
+    # --- Text-to-speech (Cartesia Sonic) ---
+    # Speaks the assistant prompts in natural Indian-language voices — crucially
+    # real Telugu, which most browsers can't synthesise. Leave the key (or the
+    # voice id) blank to disable: the frontend then falls back to the browser's
+    # on-device speech. One Sonic voice can speak every supported language; set a
+    # per-language id only if you want a different voice for Telugu/Hindi.
+    cartesia_api_key: str = ""
+    cartesia_base_url: str = "https://api.cartesia.ai"
+    cartesia_version: str = "2026-03-01"
+    cartesia_model: str = "sonic-3.5"
+    cartesia_voice_id: str = ""       # default voice (all languages)
+    cartesia_voice_te: str = ""       # optional override for Telugu
+    cartesia_voice_hi: str = ""       # optional override for Hindi
+    cartesia_voice_en: str = ""       # optional override for English
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_origins(cls, v):

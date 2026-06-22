@@ -28,7 +28,7 @@ function FeatureCards() {
   const [active, setActive] = useState(null)
 
   return (
-    <section className="flex shrink-0 items-stretch gap-3 px-8 pt-3">
+    <section className="flex shrink-0 flex-wrap items-stretch gap-3 px-4 pt-3 sm:px-8 lg:flex-nowrap">
       {FEATURES.map(({ key, icon: Icon }, i) => {
         const a = ACCENTS[i % ACCENTS.length]
         const isActive = active === i

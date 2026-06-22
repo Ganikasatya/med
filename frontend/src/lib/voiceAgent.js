@@ -14,8 +14,12 @@
  * still works fully offline — just a little less forgiving of free-form phrasing.
  */
 import { voiceApi } from '../api'
-import { listen as browserListen, parseDigits } from './voice.js'
+import { listen as browserListen, parseDigits, voiceStatus } from './voice.js'
 import { todayISO } from './format.js'
+
+// Cloud TTS lives in voice.js (so plain `speak()` callers get it too); re-export
+// for the voice-booking page which probes/uses these directly.
+export { cloudTtsAvailable, speakCloud, stopCloudSpeak } from './voice.js'
 
 const SPEECH_CODE = { en: 'en-IN', te: 'te-IN', hi: 'hi-IN' }
 export const speechCode = (lang) => SPEECH_CODE[lang] || 'en-IN'
@@ -26,17 +30,9 @@ export const canRecord = () =>
   typeof window !== 'undefined' &&
   typeof window.MediaRecorder !== 'undefined'
 
-/** Has the backend got a cloud-voice key? Cached after the first probe. */
-let _cloudVoice = null
+/** Has the backend got a cloud-voice (STT/NLU) key? */
 export async function cloudVoiceAvailable() {
-  if (_cloudVoice !== null) return _cloudVoice
-  try {
-    const { cloud_voice } = await voiceApi.status()
-    _cloudVoice = !!cloud_voice
-  } catch {
-    _cloudVoice = false
-  }
-  return _cloudVoice
+  return !!(await voiceStatus()).cloud_voice
 }
 
 /** Pick the recorder MIME type the browser actually supports. */
@@ -59,16 +55,23 @@ export async function startRecording() {
   const rec = new window.MediaRecorder(stream, mime ? { mimeType: mime } : undefined)
   const chunks = []
   rec.ondataavailable = (e) => e.data?.size && chunks.push(e.data)
-  rec.start()
+  // Collect chunks throughout the recording. Some browsers do not reliably emit
+  // a useful final chunk if start() is called without a timeslice.
+  rec.start(250)
 
   const stop = () =>
     new Promise((resolve) => {
-      rec.onstop = () => {
+      const finish = () => {
         stream.getTracks().forEach((t) => t.stop())
         resolve(new Blob(chunks, { type: mime || 'audio/webm' }))
       }
-      if (rec.state !== 'inactive') rec.stop()
-      else resolve(new Blob(chunks, { type: mime || 'audio/webm' }))
+      rec.onstop = finish
+      if (rec.state !== 'inactive') {
+        try { rec.requestData() } catch { /* ignore */ }
+        rec.stop()
+      } else {
+        finish()
+      }
     })
 
   return { stop }
@@ -103,20 +106,33 @@ export async function listenOnce(lang) {
 
 const YES_WORDS = [
   'yes', 'yeah', 'yep', 'sure', 'ok', 'okay', 'correct', 'confirm', 'book',
-  'avunu', 'అవును', 'సరే', ' సరి', 'haan', 'haa', 'हां', 'हाँ', 'जी', 'ठीक',
+  'avunu', 'avunandi', 'sare', 'yes andi', 'okay andi',
+  '\u0c05\u0c35\u0c41\u0c28\u0c41', // ?????
+  '\u0c05\u0c35\u0c41\u0c28\u0c02\u0c21\u0c3f', // ???????
+  '\u0c38\u0c30\u0c47', // ???
+  '\u0c0e\u0c38\u0c4d', // ???
+  'haan', 'haa', 'hanji', 'ji',
 ]
 const NO_WORDS = [
   'no', 'nope', 'cancel', 'wrong', 'change', 'back',
-  'kaadu', 'వద్దు', 'కాదు', 'nahi', 'nahin', 'नहीं', 'मत',
+  'kaadu', 'kadu', 'vaddu', 'ledu', 'nahi', 'nahin',
+  '\u0c15\u0c3e\u0c26\u0c41', // ????
+  '\u0c35\u0c26\u0c4d\u0c26\u0c41', // ?????
+  '\u0c32\u0c47\u0c26\u0c41', // ????
 ]
 
 function localYesNo(text) {
-  const t = (text || '').toLowerCase()
-  if (YES_WORDS.some((w) => t.includes(w))) return 'yes'
-  if (NO_WORDS.some((w) => t.includes(w))) return 'no'
+  const normalized = String(text || '')
+    .toLowerCase()
+    .normalize('NFKC')
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!normalized) return ''
+  if (YES_WORDS.some((word) => normalized.includes(word))) return 'yes'
+  if (NO_WORDS.some((word) => normalized.includes(word))) return 'no'
   return ''
 }
-
 /** Cheap token-overlap score between a spoken phrase and an option label. */
 function scoreMatch(text, label) {
   const norm = (s) =>
@@ -136,13 +152,14 @@ function scoreMatch(text, label) {
 /** Resolve "yes/no" from speech. */
 export async function interpretYesNo(transcript, lang) {
   const local = localYesNo(transcript)
+  if (local) return { value: local, reply: '' }
   try {
     if (await cloudVoiceAvailable()) {
       const r = await voiceApi.nlu({ transcript, language: lang, task: 'yes_no' })
       if (r.value === 'yes' || r.value === 'no') return { value: r.value, reply: r.reply }
     }
-  } catch { /* fall through to local */ }
-  return { value: local, reply: '' }
+  } catch { /* no local or cloud match */ }
+  return { value: '', reply: '' }
 }
 
 /**

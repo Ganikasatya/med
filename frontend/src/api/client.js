@@ -75,6 +75,7 @@ async function request(path, opts = {}) {
   }
 
   if (res.status === 204) return null
+  if (opts.blob) return res.blob()
   const ct = res.headers.get('content-type') || ''
   return ct.includes('application/json') ? res.json() : res.text()
 }

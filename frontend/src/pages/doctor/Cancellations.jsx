@@ -43,13 +43,14 @@ function Cancellations() {
     <div className="flex flex-col gap-4">
       <PageHeading title="Cancellations / No Shows" subtitle="Track missed and cancelled appointments." />
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <StatCard value={rows.length} label="Total" icon={XCircle} tone="orange" />
         <StatCard value={cancelled} label="Cancelled" icon={RotateCcw} tone="red" />
         <StatCard value={noShow} label="No Shows" icon={UserX} tone="purple" />
       </div>
 
       <Card>
+        <div className="overflow-x-auto">
         <table className="w-full text-left">
           <thead>
             <tr className="text-[12px] font-semibold text-slate-400">
@@ -74,6 +75,7 @@ function Cancellations() {
             })}
           </tbody>
         </table>
+        </div>
         {loading ? (
           <p className="py-8 text-center text-sm text-slate-400">Loading…</p>
         ) : rows.length === 0 ? (

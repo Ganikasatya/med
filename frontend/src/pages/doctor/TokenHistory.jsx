@@ -35,6 +35,7 @@ function TokenHistory() {
       </PageHeading>
 
       <Card>
+        <div className="overflow-x-auto">
         <table className="w-full text-left">
           <thead>
             <tr className="text-[12px] font-semibold text-slate-400">
@@ -58,6 +59,7 @@ function TokenHistory() {
             })}
           </tbody>
         </table>
+        </div>
         {loading ? (
           <p className="py-8 text-center text-sm text-slate-400">Loading…</p>
         ) : rows.length === 0 ? (
