@@ -151,6 +151,7 @@ function LiveQueue() {
               <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-500 opacity-75" /><span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" /></span>Live
             </span>
           </div>
+          <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
               <tr className="text-[12px] font-semibold text-slate-400">
@@ -180,6 +181,7 @@ function LiveQueue() {
               ))}
             </tbody>
           </table>
+          </div>
           {!current && waiting.length === 0 && <p className="py-8 text-center text-sm text-slate-400">Queue is empty.</p>}
         </Card>
       </div>

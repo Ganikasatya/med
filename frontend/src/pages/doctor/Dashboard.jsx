@@ -347,7 +347,7 @@ function Dashboard() {
             <motion.div {...rise} transition={{ delay: 0.25 }}>
               <Card>
                 <h3 className="mb-3 text-[16px] font-bold text-brand-navy">Quick Actions</h3>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {ACTIONS.map(({ label, icon: Icon, tone, go, delay }) => (
                     <motion.button
                       key={label} whileHover={{ scale: 1.04, y: -2 }} whileTap={{ scale: 0.96 }}

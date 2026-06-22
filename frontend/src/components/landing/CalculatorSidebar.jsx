@@ -15,7 +15,7 @@ function CalculatorSidebar() {
   const [active, setActive] = useState(null) // label of the open calculator
 
   return (
-    <aside className="flex h-full w-[280px] shrink-0 flex-col gap-4 overflow-hidden py-5 pl-5 pr-1">
+    <aside className="flex h-full w-full shrink-0 flex-col gap-4 overflow-hidden px-4 py-5 lg:w-[280px] lg:pl-5 lg:pr-1">
       <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-slate-100 bg-white px-4 py-4 shadow-card">
         {/* Header */}
         <div className="mb-2 flex items-center gap-2.5 border-b border-slate-100 pb-3">

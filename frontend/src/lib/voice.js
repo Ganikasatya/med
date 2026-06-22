@@ -4,13 +4,15 @@
  * voice. Everything degrades gracefully when the API is missing.
  */
 
+import { voiceApi } from '../api'
+
 const SR = typeof window !== 'undefined' ? window.SpeechRecognition || window.webkitSpeechRecognition : null
 
 export const sttSupported = () => !!SR
 export const ttsSupported = () => typeof window !== 'undefined' && 'speechSynthesis' in window
 
 const FALLBACK_LANGS = {
-  'te-IN': ['te-IN', 'te', 'hi-IN', 'hi', 'en-IN', 'en'],
+  'te-IN': ['te-IN', 'te'],
   'hi-IN': ['hi-IN', 'hi', 'en-IN', 'en'],
   'en-IN': ['en-IN', 'en'],
 }
@@ -85,12 +87,141 @@ export async function nativeTtsVoiceAvailable(lang = 'en-IN') {
   return voices.some((voice) => voiceMatchesLang(voice, lang))
 }
 
-/** Speak `text` in the given BCP-47 language; resolves when done (or instantly if unsupported). */
+// ----------------------------------------------------------- cloud TTS -------
+// Server-side text-to-speech (Cartesia Sonic) for Telugu/Hindi prompts. When
+// configured, prompts route through Cartesia only; browser speech is used only
+// when cloud TTS is not configured.
+
+let _status = null
+/** Backend voice status (STT + TTS), cached after the first probe. */
+export async function voiceStatus() {
+  if (_status !== null) return _status
+  try {
+    _status = await voiceApi.status()
+  } catch {
+    _status = { cloud_voice: false, cloud_tts: false }
+  }
+  return _status
+}
+
+/** Is Cartesia TTS configured server-side? */
+export async function cloudTtsAvailable() {
+  return !!(await voiceStatus()).cloud_tts
+}
+
+// One shared <audio> element so a new prompt cancels any still-playing one.
+let _ttsAudio = null
+let _ttsDone = null // resolves the in-flight speakCloud() promise when we stop it
+
+// Monotonic token: every speak()/stopSpeaking() bumps it, so a prompt that was
+// started before a newer one (or before a stop) aborts instead of overlapping.
+// This is what prevents the cloud voice and the browser voice — which play on
+// separate channels — from ever sounding at the same time.
+let _speakSeq = 0
+
+/** Stop any cloud-TTS audio that's currently playing. */
+export function stopCloudSpeak() {
+  if (_ttsDone) {
+    try { _ttsDone(false) } catch { /* ignore */ }
+    _ttsDone = null
+  }
+  if (_ttsAudio) {
+    try { _ttsAudio.pause() } catch { /* ignore */ }
+    _ttsAudio = null
+  }
+}
+
+/**
+ * Speak `text` via Cartesia and resolve `true` when playback ends. Resolves
+ * `false` (never throws) if TTS is unavailable or playback fails. `lang` is a
+ * short code (en/te/hi).
+ */
+export async function speakCloud(text, lang = 'en') {
+  if (!text) return false
+  const seq = _speakSeq // abort if a newer prompt/stop happens while we fetch
+  let url = null
+  try {
+    const blob = await voiceApi.tts(text, lang)
+    url = URL.createObjectURL(blob)
+  } catch {
+    return false
+  }
+  if (seq !== _speakSeq) { URL.revokeObjectURL(url); return false }
+  stopCloudSpeak()
+  return new Promise((resolve) => {
+    const audio = new Audio(url)
+    _ttsAudio = audio
+    let settled = false
+    const done = (ok) => {
+      if (settled) return
+      settled = true
+      if (_ttsDone === done) _ttsDone = null
+      if (_ttsAudio === audio) _ttsAudio = null
+      URL.revokeObjectURL(url)
+      resolve(ok)
+    }
+    _ttsDone = done
+    audio.onended = () => done(true)
+    audio.onerror = () => done(false)
+    audio.onpause = () => {
+      // Some browsers emit pause as part of natural completion. Do not report
+      // that as a cloud failure, or speak() will repeat the prompt via the
+      // browser fallback after Cartesia has already finished.
+      if (audio.ended) done(true)
+    }
+    audio.play().catch(() => done(false))
+  })
+}
+
+/** A voice that genuinely speaks the target language (same family), or null. */
+function pickNativeVoice(voices, lang) {
+  let best = null
+  let bestScore = 0
+  voices.forEach((voice, index) => {
+    if (!voiceMatchesLang(voice, lang)) return
+    // Prefer an exact lang match, then same base language; later voices lose ties.
+    const score = voiceScore(voice, lang, index) || 1
+    if (score > bestScore) { best = voice; bestScore = score }
+  })
+  return best
+}
+
+
+/**
+ * Speak `text` in the given BCP-47 language; resolves when done (or instantly if
+ * unsupported).
+ *
+ * Telugu should stay Telugu: no romanized/English browser fallback is used.
+ */
 export async function speak(text, lang = 'en-IN', options = {}) {
-  if (!ttsSupported() || !text) return
+  if (!text) return
+
+  // Cancel anything currently speaking (cloud or browser) and claim this turn.
+  // If a newer speak()/stopSpeaking() happens while we await below, `seq` goes
+  // stale and we bail out — so only the latest prompt is ever heard.
+  stopSpeaking()
+  const seq = _speakSeq
+
+  // 0) Prefer cloud TTS (Cartesia). If it is configured, do not repeat the same
+  //    prompt through browser speech if playback fails or finishes oddly.
+  const shortLang = (options.lang || String(lang).split('-')[0] || 'en').toLowerCase()
+  const isTelugu = String(lang).toLowerCase().startsWith('te') || shortLang === 'te'
+  if (await cloudTtsAvailable()) {
+    if (seq !== _speakSeq) return
+    await speakCloud(text, shortLang)
+    return
+  }
+  if (isTelugu) return
+
+  if (!ttsSupported() || seq !== _speakSeq) return
   const voices = await loadVoices()
-  const voice = pickVoice(voices, lang)
-  const speakText = options.fallbackText && !voiceMatchesLang(voice, lang) ? options.fallbackText : text
+  if (seq !== _speakSeq) return
+
+  // 1) A real voice for this language reads the native-script text best.
+  const native = pickNativeVoice(voices, lang)
+  const voice = native || pickVoice(voices, lang)
+  const speakText = text
+  const rate = 0.95
 
   return new Promise((resolve) => {
     if (!ttsSupported() || !speakText) return resolve()
@@ -103,7 +234,7 @@ export async function speak(text, lang = 'en-IN', options = {}) {
       } else {
         u.lang = lang
       }
-      u.rate = 0.95
+      u.rate = rate
       u.onend = () => resolve()
       u.onerror = () => resolve()
       window.speechSynthesis.speak(u)
@@ -114,6 +245,8 @@ export async function speak(text, lang = 'en-IN', options = {}) {
 }
 
 export function stopSpeaking() {
+  _speakSeq += 1 // invalidate any in-flight speak() so it won't start a 2nd voice
+  stopCloudSpeak()
   if (ttsSupported()) {
     try { window.speechSynthesis.cancel() } catch { /* ignore */ }
   }

@@ -150,7 +150,7 @@ function HowItWorks() {
         {t('how.heading')}
       </motion.h2>
 
-      <div className="flex items-stretch">
+      <div className="flex items-stretch overflow-x-auto pb-1 sm:overflow-x-visible">
         {HOW_IT_WORKS.map(({ step, key, icon: Icon }, i) => (
           <Fragment key={step}>
             <FlipStep step={step} stepKey={key} Icon={Icon} index={i} />

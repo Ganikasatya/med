@@ -80,6 +80,31 @@ const coreT = {
   'auth.notRegistered': { en: 'This number is not registered. Please register.', te: 'ఈ నంబర్ నమోదు కాలేదు. దయచేసి నమోదు చేయండి.', hi: 'यह नंबर पंजीकृत नहीं है। कृपया रजिस्टर करें।' },
   'auth.doctorEmail': { en: 'Doctors log in with email & password.', te: 'డాక్టర్లు ఇమెయిల్ & పాస్‌వర్డ్‌తో లాగిన్ అవుతారు.', hi: 'डॉक्टर ईमेल और पासवर्ड से लॉगिन करते हैं।' },
   'auth.staffNumber': { en: 'This number belongs to a staff account. Please use the clinic/staff login.', te: 'ఈ నంబర్ సిబ్బంది ఖాతాకు చెందినది. దయచేసి క్లినిక్/సిబ్బంది లాగిన్ వాడండి.', hi: 'यह नंबर स्टाफ खाते का है। कृपया क्लिनिक/स्टाफ लॉगिन का उपयोग करें।' },
+
+  // ---- Guided voice walkthrough (auto-fills the registration form by voice) ----
+  'guide.start': { en: 'Voice guide', te: 'వాయిస్ గైడ్', hi: 'वॉइस गाइड' },
+  'guide.stop': { en: 'Stop guide', te: 'గైడ్ ఆపండి', hi: 'गाइड रोकें' },
+  'guide.running': { en: 'Voice guide is on — just speak when you see the arrow.', te: 'వాయిస్ గైడ్ ఆన్‌లో ఉంది — బాణం కనిపించినప్పుడు మాట్లాడండి.', hi: 'वॉइस गाइड चालू है — तीर दिखने पर बोलें।' },
+  'guide.welcome': { en: "Hello! I'll help you register. Just speak when you see the arrow, and I'll fill it for you.", te: 'నమస్కారం! నేను మిమ్మల్ని నమోదు చేయడంలో సహాయం చేస్తాను. బాణం కనిపించినప్పుడు మాట్లాడండి, నేను మీ కోసం నింపుతాను.', hi: 'नमस्ते! मैं आपको रजिस्टर करने में मदद करूँगा। तीर दिखने पर बोलें, मैं आपके लिए भर दूँगा।' },
+  'guide.signupHere': { en: 'Sign up here', te: 'ఇక్కడ నమోదు చేసుకోండి', hi: 'यहाँ साइन अप करें' },
+  'guide.nameBubble': { en: 'Tell me your name', te: 'మీ పేరు చెప్పండి', hi: 'अपना नाम बताएं' },
+  'guide.namePrompt': { en: 'Tell me your full name, and I will fill it for you.', te: 'మీ పూర్తి పేరు చెప్పండి, నేను మీ కోసం నింపుతాను.', hi: 'अपना पूरा नाम बताएं, मैं आपके लिए भर दूँगा।' },
+  'guide.mobileBubble': { en: 'Say your mobile number', te: 'మీ మొబైల్ నంబర్ చెప్పండి', hi: 'अपना मोबाइल नंबर बोलें' },
+  'guide.mobilePrompt': { en: 'Now say your ten digit mobile number.', te: 'ఇప్పుడు మీ పది అంకెల మొబైల్ నంబర్ చెప్పండి.', hi: 'अब अपना दस अंकों का मोबाइल नंबर बोलें।' },
+  'guide.cityBubble': { en: 'Say your city', te: 'మీ నగరం చెప్పండి', hi: 'अपना शहर बोलें' },
+  'guide.cityPrompt': { en: 'Which city are you in? Say it, or stay quiet to skip.', te: 'మీరు ఏ నగరంలో ఉన్నారు? చెప్పండి, లేదా దాటవేయడానికి నిశ్శబ్దంగా ఉండండి.', hi: 'आप किस शहर में हैं? बोलें, या छोड़ने के लिए चुप रहें।' },
+  'guide.gotIt': { en: 'Got it, thank you.', te: 'దొరికింది, ధన్యవాదాలు.', hi: 'मिल गया, धन्यवाद।' },
+  'guide.retry': { en: "Sorry, I didn't catch that. Please say it once more.", te: 'క్షమించండి, వినిపించలేదు. దయచేసి మరోసారి చెప్పండి.', hi: 'माफ़ कीजिए, समझ नहीं आया। कृपया एक बार और बोलें।' },
+  'guide.sendingOtp': { en: 'Great! Sending your O T P now.', te: 'బాగుంది! ఇప్పుడు మీ OTPని పంపుతున్నాను.', hi: 'बढ़िया! अब आपका OTP भेज रहा हूँ।' },
+  'guide.speaking': { en: 'Speaking…', te: 'మాట్లాడుతోంది…', hi: 'बोल रहा है…' },
+
+  'guide.listenUnavailable': { en: 'Listening is not configured. Add OPENAI_API_KEY in backend .env, restart the backend, then try again.', te: 'Listening is not configured. Add OPENAI_API_KEY in backend .env, restart backend, then try again.', hi: 'Listening is not configured. Add OPENAI_API_KEY in backend .env, restart backend, then try again.' },
+  'guide.didntHear': { en: 'I could not hear that. Please allow microphone access and try again.', te: 'I could not hear that. Please allow microphone access and try again.', hi: 'I could not hear that. Please allow microphone access and try again.' },
+  // ---- Landing-page coach-mark (points at the login/sign-up entry) ----
+  'land.guide.bubble': { en: 'Tap here to sign up or log in as a patient', te: 'రోగిగా నమోదు లేదా లాగిన్ కావడానికి ఇక్కడ నొక్కండి', hi: 'मरीज़ के रूप में साइन अप या लॉगिन के लिए यहाँ टैप करें' },
+  'land.guide.speak': { en: 'Welcome! To book a doctor, sign up here as a patient. Tap the highlighted button and I will guide you step by step.', te: 'స్వాగతం! డాక్టర్‌ను బుక్ చేయడానికి, ఇక్కడ రోగిగా నమోదు అవ్వండి. హైలైట్ చేసిన బటన్‌ను నొక్కండి, నేను అడుగడుగునా మీకు దారి చూపుతాను.', hi: 'स्वागत है! डॉक्टर बुक करने के लिए यहाँ मरीज़ के रूप में साइन अप करें। हाइलाइट किए बटन पर टैप करें, मैं कदम-कदम पर मार्गदर्शन करूँगा।' },
+  'land.guide.cta': { en: 'Start sign up', te: 'నమోదు ప్రారంభించండి', hi: 'साइन अप शुरू करें' },
+  'land.guide.dismiss': { en: 'Dismiss', te: 'మూసివేయండి', hi: 'बंद करें' },
 }
 
 // Core (navbar/hero/lifeline/auth) merged with the Phase-2 landing + dashboard dicts.

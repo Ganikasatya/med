@@ -12,12 +12,16 @@ const ICONS = {
 }
 
 /** Left navigation rail for the Assistant console — navy, grouped sections. */
-function AssistantSidebar() {
+function AssistantSidebar({ open = false, onClose }) {
   const navigate = useNavigate()
   const { logout } = useAuth()
 
   return (
-    <aside className="flex h-full w-64 shrink-0 flex-col bg-brand-navy text-slate-300">
+    <aside
+      className={`fixed inset-y-0 left-0 z-50 flex h-full w-64 shrink-0 flex-col bg-brand-navy text-slate-300 transition-transform duration-300 lg:static lg:z-auto lg:translate-x-0 ${
+        open ? 'translate-x-0' : '-translate-x-full'
+      }`}
+    >
       {/* Brand */}
       <div className="flex items-center gap-2.5 px-5 pb-5 pt-5">
         <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-blue text-white">
@@ -30,7 +34,10 @@ function AssistantSidebar() {
       </div>
 
       {/* Grouped nav */}
-      <nav className="flex-1 space-y-4 overflow-y-auto px-3 pb-4">
+      <nav
+        className="flex-1 space-y-4 overflow-y-auto px-3 pb-4"
+        onClick={(e) => { if (e.target.closest('a')) onClose?.() }}
+      >
         {ASSISTANT_NAV.map((group, gi) => (
           <div key={gi}>
             {group.section && (

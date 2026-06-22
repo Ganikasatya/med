@@ -379,8 +379,22 @@ export const dashboardT = {
   'vbook.micDenied': { en: 'Microphone is blocked. Allow it, or pick options by tapping.', te: 'మైక్రోఫోన్ నిరోధించబడింది. అనుమతించండి, లేదా నొక్కి ఎంచుకోండి.', hi: 'माइक्रोफ़ोन अवरुद्ध है। अनुमति दें, या टैप करके चुनें।' },
   'vbook.orTap': { en: 'or tap an option below', te: 'లేదా కింద ఒక ఎంపికను నొక్కండి', hi: 'या नीचे एक विकल्प टैप करें' },
 
+  // Telugu voice usage instructions (shown when Telugu is selected)
+  'vbook.guideTitle': { en: 'How to book by voice', te: 'వాయిస్‌తో ఎలా బుక్ చేయాలి', hi: 'आवाज़ से कैसे बुक करें' },
+  'vbook.guideStep1': { en: 'Tap the big mic button and speak.', te: 'పెద్ద మైక్ బటన్ నొక్కి మాట్లాడండి.', hi: 'बड़े माइक बटन को दबाएं और बोलें।' },
+  'vbook.guideStep2': { en: 'Say your problem in Telugu — for example "jvaram" (fever) or "daggu" (cough).', te: 'మీ సమస్యను తెలుగులో చెప్పండి — ఉదాహరణకు "జ్వరం" లేదా "దగ్గు".', hi: 'अपनी समस्या तेलुगु में बोलें — जैसे "ज्वरम" या "दग्गु"।' },
+  'vbook.guideStep3': { en: 'I will read out each step. Listen, then answer when the mic turns red.', te: 'నేను ప్రతి అడుగును చదివి వినిపిస్తాను. విని, మైక్ ఎరుపు అయ్యాక సమాధానం చెప్పండి.', hi: 'मैं हर कदम पढ़कर सुनाऊंगा। सुनें, फिर माइक लाल होने पर जवाब दें।' },
+  'vbook.guideStep4': { en: 'If voice does not work, just tap the options shown below.', te: 'వాయిస్ పని చేయకపోతే, కింద కనిపించే ఎంపికలను నొక్కండి చాలు.', hi: 'अगर आवाज़ काम न करे, तो नीचे दिखे विकल्पों को टैप करें।' },
+
   // Step prompts (spoken aloud + shown)
   'vbook.askSymptom': { en: 'Hello! Tell me, what is the problem? For example: fever, cough, or stomach pain.', te: 'నమస్తే! చెప్పండి, సమస్య ఏమిటి? ఉదాహరణకు: జ్వరం, దగ్గు, లేదా కడుపు నొప్పి.', hi: 'नमस्ते! बताइए, क्या तकलीफ़ है? जैसे: बुखार, खांसी, या पेट दर्द।' },
+  'vbook.askPreference': { en: 'Are you looking for a particular doctor or clinic, or may I find a suitable doctor for you?', te: 'మీరు ప్రత్యేకంగా ఏదైనా డాక్టర్ లేదా క్లినిక్ కోసం చూస్తున్నారా, లేక మీకు సరైన డాక్టర్‌ను నేను కనుగొననా?', hi: 'क्या आप किसी खास डॉक्टर या क्लिनिक को ढूंढ रहे हैं, या मैं आपके लिए सही डॉक्टर खोजूं?' },
+  'vbook.findSuitable': { en: 'Find a suitable doctor', te: 'సరైన డాక్టర్‌ను కనుగొనండి', hi: 'सही डॉक्टर खोजें' },
+  'vbook.particularDoctor': { en: 'A particular doctor or clinic', te: 'ప్రత్యేక డాక్టర్ లేదా క్లినిక్', hi: 'खास डॉक्टर या क्लिनिक' },
+  'vbook.askParticular': { en: 'Please say the name of the doctor or clinic you are looking for.', te: 'మీరు వెతుకుతున్న డాక్టర్ లేదా క్లినిక్ పేరు చెప్పండి.', hi: 'जिस डॉक्टर या क्लिनिक को आप ढूंढ रहे हैं उसका नाम बताइए।' },
+  'vbook.askLocation': { en: 'Which location would you like to visit for your check-up?', te: 'చెకప్ కోసం మీరు ఏ ప్రాంతానికి వెళ్లాలనుకుంటున్నారు?', hi: 'चेकअप के लिए आप किस जगह जाना चाहेंगे?' },
+  'vbook.noParticular': { en: 'Sorry, I could not find that doctor or clinic. I will show other suitable doctors.', te: 'క్షమించండి, ఆ డాక్టర్ లేదా క్లినిక్ దొరకలేదు. ఇతర సరైన డాక్టర్లను చూపిస్తాను.', hi: 'माफ कीजिए, वह डॉक्टर या क्लिनिक नहीं मिला। मैं दूसरे सही डॉक्टर दिखाता हूं।' },
+  'vbook.noDoctorsInLocation': { en: 'Sorry, we could not find anyone in {location}. Here are suitable doctors from other locations.', te: 'క్షమించండి, {location}లో ఎవరూ దొరకలేదు. ఇతర ప్రాంతాల్లో ఉన్న సరైన డాక్టర్లు ఇక్కడ ఉన్నారు.', hi: 'माफ कीजिए, {location} में कोई डॉक्टर नहीं मिला। दूसरी जगहों के सही डॉक्टर यहां हैं।' },
   'vbook.askDoctor': { en: 'I found these doctors for you. Which one would you like? Say the name or say first, second.', te: 'మీ కోసం ఈ డాక్టర్లను కనుగొన్నాను. ఎవరు కావాలి? పేరు చెప్పండి లేదా మొదటి, రెండవ అని చెప్పండి.', hi: 'मैंने आपके लिए ये डॉक्टर ढूंढे। कौन सा चाहिए? नाम बोलें या पहला, दूसरा कहें।' },
   'vbook.askDate': { en: 'Which day? You can say today or tomorrow.', te: 'ఏ రోజు? ఈరోజు లేదా రేపు అని చెప్పవచ్చు.', hi: 'किस दिन? आप आज या कल कह सकते हैं।' },
   'vbook.askSlot': { en: 'These times are open. Which time suits you?', te: 'ఈ సమయాలు అందుబాటులో ఉన్నాయి. ఏ సమయం మీకు అనుకూలం?', hi: 'ये समय उपलब्ध हैं। कौन सा समय ठीक रहेगा?' },

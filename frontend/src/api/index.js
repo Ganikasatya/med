@@ -180,4 +180,7 @@ export const voiceApi = {
     return api.post('/voice/transcribe', fd, { isForm: true })
   },
   nlu: (body) => api.post('/voice/nlu', body),
+  // Cartesia TTS — returns an audio Blob (MP3). Throws ApiError(503) when cloud
+  // TTS isn't configured, which the voice agent treats as "use browser speech".
+  tts: (text, language = 'en') => api.post('/voice/tts', { text, language }, { blob: true }),
 }

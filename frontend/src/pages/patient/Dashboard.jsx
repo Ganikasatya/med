@@ -1,9 +1,9 @@
-import { useEffect, useState, Fragment } from 'react'
+import { useEffect, useRef, useState, Fragment } from 'react'
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import {
   ArrowRight, MapPin, Clock, Bell, Heart, ShieldCheck,
-  Stethoscope, CalendarPlus, Sparkles, CalendarDays, Ticket, CheckCircle2, FolderHeart,
+  Stethoscope, CalendarPlus, Sparkles, CalendarDays, Ticket, CheckCircle2, FolderHeart, Mic,
   Upload, Search, CalendarClock, Car, Users, AlertTriangle,
 } from 'lucide-react'
 import { Card, StatusBadge, Avatar } from '../../components/clinic/ui.jsx'
@@ -11,6 +11,7 @@ import { usePatientCtx } from '../../context/PatientContext.jsx'
 import { patientsApi, tokensApi } from '../../api'
 import { dateChip, prettyTime, statusLabel, todayISO, clockIST } from '../../lib/format.js'
 import { useI18n } from '../../i18n/index.jsx'
+import { speak } from '../../lib/voice.js'
 
 const KPI_TONE = {
   blue: 'bg-blue-100 text-brand-blue',
@@ -276,14 +277,25 @@ function QueueEmpty({ nextAppt }) {
 }
 
 function Dashboard() {
-  const { t } = useI18n()
+  const { t, lang, speech } = useI18n()
   const { patient, resolveDoctor, resolveHospital, resolveAffiliation } = usePatientCtx()
   const [appts, setAppts] = useState([])
   const [docCount, setDocCount] = useState(0)
   const [est, setEst] = useState(null)     // my token status for today (identity + ETA + leave-by)
   const [loading, setLoading] = useState(true)
   const [notify, setNotify] = useState(false)
+  const voicePrompted = useRef(false)
 
+  useEffect(() => {
+    if (lang !== 'te' || voicePrompted.current) return undefined
+    const id = setTimeout(() => {
+      voicePrompted.current = true
+      speak('Voice tho appointment book cheyyadaniki, dashboard lo Book by Voice button click cheyyandi.', speech)
+    }, 700)
+    return () => {
+      clearTimeout(id)
+    }
+  }, [lang, speech])
   // "Notify Me" → ask the browser for notification permission. The backend
   // already schedules a 15-min "time to leave" reminder; this opts in locally.
   const notifyMe = async () => {
@@ -371,6 +383,28 @@ function Dashboard() {
         <p className="text-[13.5px] text-slate-500">{t('pdash.greetingLine')}</p>
       </div>
 
+      {lang === 'te' && (
+        <Link
+          to="appointments/voice"
+          className="group relative isolate overflow-hidden rounded-2xl border border-teal-200 bg-white px-5 py-4 shadow-card transition-all hover:-translate-y-0.5 hover:border-teal-300 hover:shadow-[0_18px_45px_rgba(13,148,136,0.18)]"
+        >
+          <span className="absolute -right-8 top-1/2 h-24 w-24 -translate-y-1/2 rounded-full bg-teal-100 blur-2xl" />
+          <span className="relative flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <span className="flex items-center gap-3">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-teal-50 text-teal-600 ring-1 ring-teal-100">
+                <Mic className="h-6 w-6" />
+              </span>
+              <span>
+                <span className="block text-[17px] font-extrabold text-brand-navy">Book by Voice</span>
+                <span className="block text-[12.5px] font-medium text-slate-500">Click here and speak to book your appointment.</span>
+              </span>
+            </span>
+            <span className="inline-flex items-center gap-2 self-start rounded-full bg-teal-600 px-4 py-2 text-[13px] font-bold text-white transition-transform group-hover:translate-x-1 sm:self-auto">
+              <Sparkles className="h-4 w-4" /> Start Voice Booking <ArrowRight className="h-4 w-4" />
+            </span>
+          </span>
+        </Link>
+      )}
       <Link
         to="appointments/book"
         className="group relative isolate overflow-hidden rounded-2xl border border-brand-blue/20 bg-gradient-to-r from-brand-blue to-brand-blueDark px-5 py-4 text-white shadow-[0_18px_45px_rgba(37,99,235,0.28)] transition-all hover:-translate-y-0.5 hover:shadow-[0_22px_55px_rgba(37,99,235,0.38)]"

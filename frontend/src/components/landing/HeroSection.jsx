@@ -15,10 +15,10 @@ function HeroSection() {
   const startPatient = () => openAuth('patient')
 
   return (
-    <section className="relative flex shrink-0 gap-6 px-8 pt-3">
+    <section className="relative flex shrink-0 flex-col gap-6 px-4 pt-3 sm:px-8 lg:flex-row">
       {/* Left column */}
-      <div className="flex w-[52%] flex-col">
-        <h1 className="text-[46px] font-extrabold leading-[1.04] tracking-tight">
+      <div className="flex w-full flex-col lg:w-[52%]">
+        <h1 className="text-3xl font-extrabold leading-[1.08] tracking-tight sm:text-4xl lg:text-[46px] lg:leading-[1.04]">
           <span className="block text-brand-navy">{t('hero.line1')}</span>
           <span className="block text-brand-navy">{t('hero.line2')}</span>
           <span className="block text-brand-green">{t('hero.line3')}</span>
@@ -29,8 +29,8 @@ function HeroSection() {
         </p>
 
         {/* Search bar */}
-        <div className="mt-5 flex items-center gap-2 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-card">
-          <div className="flex flex-1 items-center gap-3 pl-3">
+        <div className="mt-5 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-card">
+          <div className="flex min-w-0 flex-1 basis-full items-center gap-3 pl-3 sm:basis-0">
             <Search className="h-5 w-5 text-slate-400" />
             <input
               type="text"
@@ -48,7 +48,7 @@ function HeroSection() {
           </div>
           <button
             onClick={startPatient}
-            className="rounded-xl bg-brand-blue px-8 py-2.5 text-[15px] font-semibold text-white transition-colors hover:bg-brand-blueDark"
+            className="flex-1 rounded-xl bg-brand-blue px-5 py-2.5 text-[15px] font-semibold text-white transition-colors hover:bg-brand-blueDark sm:flex-none sm:px-8"
           >
             {t('hero.search')}
           </button>
@@ -90,7 +90,7 @@ function HeroSection() {
       </div>
 
       {/* Right column — visual */}
-      <div className="relative w-[48%]">
+      <div className="relative w-full lg:w-[48%]">
         <HeroVisual />
       </div>
     </section>

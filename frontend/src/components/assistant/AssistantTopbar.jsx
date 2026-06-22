@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MapPin, Bell, MessageSquare, ChevronDown } from 'lucide-react'
+import { MapPin, Bell, MessageSquare, ChevronDown, Menu } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { hospitalsApi } from '../../api'
 import { Avatar } from '../clinic/ui.jsx'
@@ -9,7 +9,7 @@ const today = () =>
   new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
 
 /** Top bar for the Assistant console: clinic context (left) + tools + user (right). */
-function AssistantTopbar() {
+function AssistantTopbar({ onMenu }) {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [clinic, setClinic] = useState(null)
@@ -23,6 +23,13 @@ function AssistantTopbar() {
     <header className="flex shrink-0 items-center justify-between border-b border-slate-100 bg-white px-6 py-3">
       {/* Clinic context */}
       <div className="flex items-center gap-2">
+        <button
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-50 lg:hidden"
+          aria-label="Toggle menu"
+          onClick={onMenu}
+        >
+          <Menu className="h-5 w-5" />
+        </button>
         <MapPin className="h-4 w-4 text-brand-blue" />
         <div className="leading-tight">
           <span className="block text-[14px] font-bold text-brand-navy">{clinic?.name || 'My Clinic'}</span>

@@ -142,7 +142,7 @@ function Doctors() {
         <ToolButton icon={Plus} tone="primary" onClick={() => setShowAdd(true)}>Add Doctor</ToolButton>
       </PageHeading>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard value={doctors.length} label="Total Doctors" icon={Stethoscope} tone="blue" />
         <StatCard value={active} label="Active" icon={UserCheck} tone="green" />
         <StatCard value={onLeave} label="On Leave" icon={UserX} tone="orange" />

@@ -25,7 +25,7 @@ function WalkIns() {
         <ToolButton icon={RefreshCw}>Refresh</ToolButton>
       </PageHeading>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {WALKIN_STATS.map((s, i) => <StatCard key={s.label} {...s} icon={STAT_ICONS[i]} />)}
       </div>
 

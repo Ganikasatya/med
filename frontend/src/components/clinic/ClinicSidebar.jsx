@@ -20,11 +20,15 @@ import { useAuth } from '../../context/AuthContext.jsx'
 const ICONS = { Home, CalendarDays, Users, UserPlus, Stethoscope, Building2, UserCog, Clock, BarChart3, Settings }
 
 /** Left navigation rail for the clinic dashboard (routed). */
-function ClinicSidebar() {
+function ClinicSidebar({ open = false, onClose }) {
   const navigate = useNavigate()
   const { logout } = useAuth()
   return (
-    <aside className="flex h-full w-64 shrink-0 flex-col border-r border-slate-100 bg-white">
+    <aside
+      className={`fixed inset-y-0 left-0 z-50 flex h-full w-64 shrink-0 flex-col border-r border-slate-100 bg-white transition-transform duration-300 lg:static lg:z-auto lg:translate-x-0 ${
+        open ? 'translate-x-0' : '-translate-x-full'
+      }`}
+    >
       <div className="px-5 pb-4 pt-5">
         <Logo />
         <p className="ml-11 -mt-1 text-[11px] font-medium text-slate-400">
@@ -32,7 +36,10 @@ function ClinicSidebar() {
         </p>
       </div>
 
-      <nav className="flex-1 space-y-1 px-3">
+      <nav
+        className="flex-1 space-y-1 overflow-y-auto px-3"
+        onClick={(e) => { if (e.target.closest('a')) onClose?.() }}
+      >
         {CLINIC_NAV.map(({ label, to, icon, end }) => {
           const Icon = ICONS[icon]
           return (

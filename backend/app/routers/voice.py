@@ -17,7 +17,7 @@ import json
 from typing import List, Literal, Optional
 
 import httpx
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel, Field
 
 from ..config import settings
@@ -37,14 +37,39 @@ _WHISPER_LANG = {"en": "en", "te": "te", "hi": "hi"}
 _LANG_NAME = {"en": "English", "te": "Telugu", "hi": "Hindi"}
 
 
-def _require_voice_enabled() -> str:
+def _stt_provider() -> str:
+    return (settings.stt_provider or "openai").strip().lower()
+
+
+def _require_openai_key() -> str:
     key = (settings.openai_api_key or "").strip()
     if not key:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
-            "Cloud voice is not configured; use the on-device fallback.",
+            "OpenAI is not configured.",
         )
     return key
+
+
+def _require_stt_enabled() -> tuple[str, str]:
+    provider = _stt_provider()
+    if provider == "deepgram":
+        key = (settings.deepgram_api_key or "").strip()
+        if key:
+            return provider, key
+    elif provider == "openai":
+        key = (settings.openai_api_key or "").strip()
+        if key:
+            return provider, key
+    raise HTTPException(
+        status.HTTP_503_SERVICE_UNAVAILABLE,
+        "Cloud voice is not configured; use the on-device fallback.",
+    )
+
+
+def _require_voice_enabled() -> str:
+    # NLU still uses OpenAI chat completions. STT may use another provider.
+    return _require_openai_key()
 
 
 # ============================================================ Transcribe =====
@@ -52,36 +77,60 @@ def _require_voice_enabled() -> str:
 async def transcribe(
     audio: UploadFile = File(...),
     language: str = Form("en"),
-    me: User = Depends(get_current_user),
 ):
-    """Speech-to-text via Whisper. `language` is a short code (en/te/hi)."""
-    key = _require_voice_enabled()
+    """Speech-to-text via Whisper. `language` is a short code (en/te/hi).
+
+    Intentionally public: it powers the pre-login patient voice registration
+    guide. The OpenAI key stays server-side.
+    """
+    provider, key = _require_stt_enabled()
     data = await audio.read()
     if not data:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Empty audio upload")
     if len(data) > MAX_AUDIO_BYTES:
         raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "Audio too large")
 
-    form = {"model": settings.openai_stt_model, "response_format": "json"}
-    hint = _WHISPER_LANG.get((language or "").lower()[:2])
-    if hint:
-        form["language"] = hint
-    files = {"file": (audio.filename or "speech.webm", data, audio.content_type or "audio/webm")}
+    lang = _WHISPER_LANG.get((language or "").lower()[:2]) or "en"
 
     try:
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
-            res = await client.post(
-                f"{settings.openai_base_url}/audio/transcriptions",
-                headers={"Authorization": f"Bearer {key}"},
-                data=form,
-                files=files,
-            )
+            if provider == "deepgram":
+                res = await client.post(
+                    f"{settings.deepgram_base_url}/v1/listen",
+                    params={"model": settings.deepgram_model, "language": lang, "smart_format": "true"},
+                    headers={
+                        "Authorization": f"Token {key}",
+                        "Content-Type": audio.content_type or "audio/webm",
+                    },
+                    content=data,
+                )
+            else:
+                form = {"model": settings.openai_stt_model, "response_format": "json"}
+                if lang:
+                    form["language"] = lang
+                files = {"file": (audio.filename or "speech.webm", data, audio.content_type or "audio/webm")}
+                res = await client.post(
+                    f"{settings.openai_base_url}/audio/transcriptions",
+                    headers={"Authorization": f"Bearer {key}"},
+                    data=form,
+                    files=files,
+                )
     except httpx.HTTPError:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Speech service unreachable")
 
     if res.status_code >= 400:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Speech service error ({res.status_code})")
-    text = (res.json() or {}).get("text", "")
+        detail = res.text[:300] if res.text else f"Speech service error ({res.status_code})"
+        print(f"{provider.title()} transcription error {res.status_code}: {detail}")
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, detail)
+
+    payload = res.json() or {}
+    if provider == "deepgram":
+        try:
+            text = payload["results"]["channels"][0]["alternatives"][0].get("transcript", "")
+        except (KeyError, IndexError, TypeError):
+            text = ""
+    else:
+        text = payload.get("text", "")
     return {"text": (text or "").strip()}
 
 
@@ -182,7 +231,97 @@ async def nlu(body: NluRequest, me: User = Depends(get_current_user)):
     )
 
 
+# ================================================================== TTS ======
+# Map the frontend's short language code to a configured Sonic voice id (falling
+# back to the default voice) and to Cartesia's language code.
+_TTS_VOICE = {
+    "te": lambda: settings.cartesia_voice_te,
+    "hi": lambda: settings.cartesia_voice_hi,
+    "en": lambda: settings.cartesia_voice_en,
+}
+_CARTESIA_LANG = {"en": "en", "te": "te", "hi": "hi"}
+MAX_TTS_CHARS = 1000
+
+
+class TtsRequest(BaseModel):
+    text: str
+    language: str = "en"
+
+
+def _tts_voice_id(language: str) -> str:
+    code = (language or "en").lower()[:2]
+    specific = _TTS_VOICE.get(code, lambda: "")()
+    return (specific or settings.cartesia_voice_id or "").strip()
+
+
+def _require_tts_enabled(language: str) -> tuple[str, str]:
+    key = (settings.cartesia_api_key or "").strip()
+    voice = _tts_voice_id(language)
+    if not key or not voice:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Cloud TTS is not configured; use the on-device fallback.",
+        )
+    return key, voice
+
+
+@router.post("/tts")
+async def tts(body: TtsRequest):
+    """Text-to-speech via Cartesia Sonic. Returns MP3 audio bytes.
+
+    Intentionally public (no auth): it powers the landing page and the
+    login/register voice guide, which run before the patient is signed in.
+    """
+    key, voice = _require_tts_enabled(body.language)
+    text = (body.text or "").strip()
+    if not text:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Empty text")
+    text = text[:MAX_TTS_CHARS]
+
+    payload = {
+        "model_id": settings.cartesia_model,
+        "transcript": text,
+        "voice": {"mode": "id", "id": voice},
+        "language": _CARTESIA_LANG.get((body.language or "en").lower()[:2], "en"),
+        "output_format": {"container": "mp3", "sample_rate": 44100, "bit_rate": 128000},
+    }
+    try:
+        async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+            res = await client.post(
+                f"{settings.cartesia_base_url}/tts/bytes",
+                headers={
+                    "Authorization": f"Bearer {key}",
+                    "Cartesia-Version": settings.cartesia_version,
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+    except httpx.HTTPError:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Speech service unreachable")
+
+    if res.status_code >= 400:
+        detail = res.text[:300] if res.text else f"Speech service error ({res.status_code})"
+        print(f"Cartesia TTS error {res.status_code}: {detail}")
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, detail)
+    return Response(content=res.content, media_type="audio/mpeg")
+
+
 @router.get("/status")
-def voice_status(me: User = Depends(get_current_user)):
-    """Lets the UI show 'high-accuracy voice on' vs 'using on-device voice'."""
-    return {"cloud_voice": bool((settings.openai_api_key or "").strip())}
+def voice_status():
+    """Lets the UI show 'high-accuracy voice on' vs 'using on-device voice'.
+
+    Public so pre-login surfaces (landing / login guide) can tell whether the
+    Cartesia voice is available.
+    """
+    cloud_tts = bool((settings.cartesia_api_key or "").strip() and _tts_voice_id("te"))
+    provider = _stt_provider()
+    cloud_stt = bool(
+        ((settings.deepgram_api_key or "").strip() if provider == "deepgram" else (settings.openai_api_key or "").strip())
+    )
+    return {
+        "cloud_voice": cloud_stt,
+        "cloud_stt": cloud_stt,
+        "stt_provider": provider,
+        "cloud_nlu": bool((settings.openai_api_key or "").strip()),
+        "cloud_tts": cloud_tts,
+    }

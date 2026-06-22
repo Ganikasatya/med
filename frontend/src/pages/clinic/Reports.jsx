@@ -111,6 +111,7 @@ function Reports() {
       {/* Top doctors */}
       <Card>
         <h3 className="mb-2 text-[15px] font-bold text-brand-navy">Top Doctors by Consultations</h3>
+        <div className="overflow-x-auto">
         <table className="w-full text-left">
           <thead>
             <tr className="text-[12px] font-semibold text-slate-400">
@@ -142,6 +143,7 @@ function Reports() {
             ))}
           </tbody>
         </table>
+        </div>
       </Card>
     </div>
   )

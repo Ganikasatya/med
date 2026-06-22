@@ -29,17 +29,24 @@ function NavItem({ label, to, icon, end }) {
 }
 
 /** Left navigation rail for the patient console. */
-function PatientSidebar() {
+function PatientSidebar({ open = false, onClose }) {
   const navigate = useNavigate()
   const { logout } = useAuth()
   const { t } = useI18n()
   return (
-    <aside className="flex h-full w-60 shrink-0 flex-col border-r border-slate-100 bg-white">
+    <aside
+      className={`fixed inset-y-0 left-0 z-50 flex h-full w-60 shrink-0 flex-col border-r border-slate-100 bg-white transition-transform duration-300 lg:static lg:z-auto lg:translate-x-0 ${
+        open ? 'translate-x-0' : '-translate-x-full'
+      }`}
+    >
       <div className="px-5 pb-3 pt-5">
         <Logo />
       </div>
 
-      <nav className="scrollbar-thin flex-1 overflow-y-auto px-3 pb-2">
+      <nav
+        className="scrollbar-thin flex-1 overflow-y-auto px-3 pb-2"
+        onClick={(e) => { if (e.target.closest('a')) onClose?.() }}
+      >
         <div className="space-y-0.5">
           {PATIENT_NAV.map((item) => <NavItem key={item.label} {...item} label={t(item.tKey)} />)}
         </div>

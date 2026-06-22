@@ -76,7 +76,7 @@ export default function AssistantAppointments() {
         <ToolButton icon={RefreshCw} onClick={() => load()}>Refresh</ToolButton>
       </PageHeading>
 
-      <motion.div initial="hidden" animate="show" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.07 } } }} className="grid grid-cols-3 gap-3">
+      <motion.div initial="hidden" animate="show" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.07 } } }} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         <motion.div variants={{ hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } }} whileHover={{ y: -4 }}>
           <StatCard value={<AnimatedNumber value={total} />} label="Today's Appointments" icon={CalendarDays} tone="blue" />
         </motion.div>
@@ -99,6 +99,7 @@ export default function AssistantAppointments() {
         ) : rows.length === 0 ? (
           <p className="py-12 text-center text-sm text-slate-400">No appointments today for this doctor.</p>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
@@ -155,6 +156,7 @@ export default function AssistantAppointments() {
               </AnimatePresence>
             </tbody>
           </table>
+          </div>
         )}
       </Card>
     </div>
