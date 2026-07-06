@@ -24,7 +24,7 @@ export const ASSISTANT_NAV = [
   {
     section: 'Clinical',
     items: [
-      { label: 'Vitals & Measurements', to: '/assistant-dashboard/vitals', icon: 'Activity', soon: true },
+      { label: 'Vitals & Measurements', to: '/assistant-dashboard/vitals', icon: 'Activity' },
       { label: 'Lab Test Orders', to: '/assistant-dashboard/lab-tests', icon: 'FlaskConical', soon: true },
       { label: 'Medicine Dispensed', to: '/assistant-dashboard/medicines', icon: 'Pill', soon: true },
     ],

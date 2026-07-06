@@ -14,7 +14,7 @@ from datetime import date, datetime, time
 from typing import Optional
 
 from sqlalchemy import (
-    Date, DateTime, ForeignKey, Numeric, String, Text, Time,
+    Boolean, Date, DateTime, ForeignKey, Numeric, String, Text, Time,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -44,6 +44,12 @@ class Appointment(Base):
     status: Mapped[str] = mapped_column(String(12), default="scheduled", index=True)
     consultation_fee: Mapped[float] = mapped_column(Numeric(8, 2), default=0)
     booking_fee_paid: Mapped[float] = mapped_column(Numeric(8, 2), default=0)
+    # Consultation fee collected in person at the clinic (NOT online). A patient
+    # can't be called as the current token until this is paid (see /tokens/next).
+    consultation_paid: Mapped[bool] = mapped_column(Boolean, default=False)
+    consultation_payment_method: Mapped[Optional[str]] = mapped_column(String(12))  # cash/upi/card/other
+    consultation_paid_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    consultation_paid_by: Mapped[Optional[int]] = mapped_column(BigIntPK, ForeignKey("users.user_id"))
     notes: Mapped[str] = mapped_column(Text, default="")
     source: Mapped[str] = mapped_column(String(12), default="app")
     booked_by: Mapped[Optional[int]] = mapped_column(BigIntPK, ForeignKey("users.user_id"))

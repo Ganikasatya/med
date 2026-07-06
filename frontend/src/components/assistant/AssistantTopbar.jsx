@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MapPin, Bell, MessageSquare, ChevronDown, Menu } from 'lucide-react'
+import { MapPin, Bell, MessageSquare, ChevronDown, Menu, Sun, Moon } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { hospitalsApi } from '../../api'
 import { Avatar } from '../clinic/ui.jsx'
@@ -9,7 +9,7 @@ const today = () =>
   new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
 
 /** Top bar for the Assistant console: clinic context (left) + tools + user (right). */
-function AssistantTopbar({ onMenu }) {
+function AssistantTopbar({ onMenu, dark, onToggleTheme }) {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [clinic, setClinic] = useState(null)
@@ -43,6 +43,14 @@ function AssistantTopbar({ onMenu }) {
         <span className="hidden rounded-lg bg-slate-50 px-3 py-1.5 text-[12px] font-semibold text-slate-500 sm:block">
           {today()}
         </span>
+        <button
+          onClick={onToggleTheme}
+          className="text-slate-400 hover:text-brand-blue"
+          aria-label={dark ? 'Switch to light theme' : 'Switch to dark theme'}
+          title={dark ? 'Light mode' : 'Dark mode'}
+        >
+          {dark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+        </button>
         <button className="relative text-slate-400 hover:text-brand-blue">
           <MessageSquare className="h-5 w-5" />
         </button>

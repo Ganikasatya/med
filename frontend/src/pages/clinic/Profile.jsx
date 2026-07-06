@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react'
 import {
-  Building2, Phone, Mail, MapPin, LocateFixed, Save, Hash, Navigation, Search,
+  Building2, Phone, Mail, MapPin, LocateFixed, Save, Hash, Navigation, Search, Fingerprint,
 } from 'lucide-react'
 import { Card, PageHeading, ToolButton } from '../../components/clinic/ui.jsx'
+import PhotoUpload from '../../components/common/PhotoUpload.jsx'
 import { TextInput, Banner } from '../../components/common/FormControls.jsx'
+import AddressAutocomplete from '../../components/common/AddressAutocomplete.jsx'
 import { hospitalsApi } from '../../api'
 import { getCurrentPosition, geocodeAddress } from '../../lib/geo.js'
 
 const EMPTY = {
   name: '', phone: '', email: '', address: '',
-  city: '', state: '', pincode: '', latitude: '', longitude: '',
+  city: '', state: '', pincode: '', hfr_id: '', latitude: '', longitude: '',
 }
 
 function ClinicProfile() {
@@ -32,7 +34,7 @@ function ClinicProfile() {
           setForm({
             name: mine.name || '', phone: mine.phone || '', email: mine.email || '',
             address: mine.address || '', city: mine.city || '', state: mine.state || '',
-            pincode: mine.pincode || '',
+            pincode: mine.pincode || '', hfr_id: mine.hfr_id || '',
             latitude: mine.latitude ?? '', longitude: mine.longitude ?? '',
           })
         }
@@ -109,6 +111,7 @@ function ClinicProfile() {
       await hospitalsApi.update(clinic.hospital_id, {
         name: form.name, phone: form.phone, email: form.email || null,
         address: form.address, city: form.city, state: form.state, pincode: form.pincode,
+        hfr_id: form.hfr_id || null,
         latitude: num(lat), longitude: num(lng),
       })
       setBanner({ type: note ? 'error' : 'success', text: 'Clinic profile saved.' + note })
@@ -138,17 +141,47 @@ function ClinicProfile() {
         {/* Details */}
         <Card className="p-5">
           <h3 className="mb-4 text-[16px] font-bold text-brand-navy">Clinic Details</h3>
+          <div className="mb-5 flex justify-center">
+            <PhotoUpload
+              url={clinic.logo_url}
+              name={form.name || clinic.name}
+              rounded="rounded-2xl"
+              label="Tap the camera to add or change your clinic logo"
+              onUpload={async (fd) => { const h = await hospitalsApi.uploadLogo(clinic.hospital_id, fd); setClinic(h); return h.logo_url }}
+            />
+          </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <TextInput label="Clinic Name" icon={Building2} value={form.name} onChange={set('name')} />
             <TextInput label="Clinic Code" icon={Hash} value={clinic.short_code || ''} disabled />
             <TextInput label="Phone" icon={Phone} value={form.phone} onChange={set('phone')} />
             <TextInput label="Email" icon={Mail} value={form.email} onChange={set('email')} />
             <div className="md:col-span-2">
-              <TextInput label="Address" icon={MapPin} value={form.address} onChange={set('address')} />
+              <label className="mb-1.5 block text-[13px] font-semibold text-slate-700">Address</label>
+              <AddressAutocomplete
+                value={form.address}
+                onChange={(val) => { setForm((f) => ({ ...f, address: val })); setBanner(null) }}
+                onSelect={(p) => setForm((f) => ({
+                  ...f,
+                  address: p.label || f.address,
+                  city: p.city || f.city,
+                  state: p.state || f.state,
+                  pincode: p.pincode || f.pincode,
+                  latitude: p.lat != null ? Number(p.lat).toFixed(6) : f.latitude,
+                  longitude: p.lng != null ? Number(p.lng).toFixed(6) : f.longitude,
+                }))}
+                biasLat={Number(form.latitude) || undefined}
+                biasLng={Number(form.longitude) || undefined}
+                placeholder="Search your clinic on Google Maps…"
+                className="flex w-full items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 pr-9 text-sm text-brand-navy outline-none transition-colors focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/10"
+              />
+              <p className="mt-1.5 text-[11.5px] text-slate-400">Pick from the suggestions to set an accurate map pin automatically.</p>
             </div>
             <TextInput label="City" value={form.city} onChange={set('city')} />
             <TextInput label="State" value={form.state} onChange={set('state')} />
             <TextInput label="Pincode" value={form.pincode} onChange={set('pincode')} />
+            <div className="md:col-span-2">
+              <TextInput label="HFR ID — Health Facility Registry (optional)" icon={Fingerprint} value={form.hfr_id} onChange={set('hfr_id')} placeholder="ABDM facility ID, if registered" />
+            </div>
           </div>
         </Card>
 

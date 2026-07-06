@@ -3,7 +3,6 @@ import {
   Home, CalendarDays, Users, UserRound, Building2, FileText, FolderHeart,
   CreditCard, Bell, Settings, LifeBuoy, LogOut, Headphones, Mic,
 } from 'lucide-react'
-import Logo from '../common/Logo.jsx'
 import { PATIENT_NAV } from '../../data/patientNav.js'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { useI18n } from '../../i18n/index.jsx'
@@ -14,8 +13,10 @@ const ICONS = {
 }
 
 const linkClass = ({ isActive }) =>
-  `flex w-full items-center gap-3 rounded-xl px-3 py-2 text-[13px] font-semibold transition-colors ${
-    isActive ? 'bg-brand-blue text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'
+  `flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-semibold transition-all ${
+    isActive
+      ? 'bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 text-teal-900 shadow-md shadow-black/25'
+      : 'text-teal-100/80 hover:bg-white/10 hover:text-white'
   }`
 
 function NavItem({ label, to, icon, end }) {
@@ -29,22 +30,22 @@ function NavItem({ label, to, icon, end }) {
 }
 
 /** Left navigation rail for the patient console. */
-function PatientSidebar({ open = false, onClose }) {
+function PatientSidebar({ open = false, collapsed = false, onClose }) {
   const navigate = useNavigate()
   const { logout } = useAuth()
   const { t } = useI18n()
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-50 flex h-full w-60 shrink-0 flex-col border-r border-slate-100 bg-white transition-transform duration-300 lg:static lg:z-auto lg:translate-x-0 ${
+      className={`fixed inset-y-0 left-0 z-50 flex h-full w-60 shrink-0 flex-col bg-teal-900 text-teal-100/85 transition-all duration-300 lg:static lg:z-auto ${
         open ? 'translate-x-0' : '-translate-x-full'
+      } ${
+        collapsed
+          ? 'lg:w-0 lg:-translate-x-full lg:overflow-hidden'
+          : 'lg:w-60 lg:translate-x-0'
       }`}
     >
-      <div className="px-5 pb-3 pt-5">
-        <Logo />
-      </div>
-
       <nav
-        className="scrollbar-thin flex-1 overflow-y-auto px-3 pb-2"
+        className="scrollbar-thin flex-1 overflow-y-auto px-3 pb-2 pt-4"
         onClick={(e) => { if (e.target.closest('a')) onClose?.() }}
       >
         <div className="space-y-0.5">
@@ -55,7 +56,7 @@ function PatientSidebar({ open = false, onClose }) {
         <button
           type="button"
           onClick={() => { logout(); navigate('/') }}
-          className="mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-[13px] font-semibold text-slate-600 transition-colors hover:bg-red-50 hover:text-red-500"
+          className="mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-semibold text-teal-100/80 transition-colors hover:bg-red-500/20 hover:text-red-200"
         >
           <LogOut className="h-[18px] w-[18px] shrink-0" />
           <span className="truncate">{t('pnav.logout')}</span>
@@ -63,13 +64,13 @@ function PatientSidebar({ open = false, onClose }) {
       </nav>
 
       {/* Need help card */}
-      <div className="m-3 flex items-center gap-3 rounded-2xl border border-slate-100 bg-brand-blueLight/60 p-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-blue text-white">
+      <div className="mx-3 mb-3 flex items-center gap-3 rounded-2xl bg-white/10 p-3.5">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/15 text-teal-100">
           <Headphones className="h-[18px] w-[18px]" />
         </span>
         <div className="leading-tight">
-          <h4 className="text-[13px] font-bold text-brand-navy">{t('pnav.needHelp')}</h4>
-          <Link to="/" className="text-[12px] font-semibold text-brand-blue hover:underline">
+          <h4 className="text-[13px] font-bold text-white">{t('pnav.needHelp')}</h4>
+          <Link to="/" className="text-[12px] font-semibold text-teal-200/70 hover:text-teal-100">
             {t('pnav.contactSupport')}
           </Link>
         </div>

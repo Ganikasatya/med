@@ -4,6 +4,8 @@
  * over an assumed average speed.
  */
 
+import { loadGoogleMaps } from './googleMaps.js'
+
 export const AVG_SPEED_KMPH = 30
 export const DETOUR_FACTOR = 1.3
 
@@ -51,6 +53,44 @@ export function travelMinutesBetween(origin, clinic) {
 }
 
 /**
+ * Real road travel time (minutes) via Google Distance Matrix when a key is set,
+ * else the straight-line haversine estimate. Always async; returns null if
+ * either point is unknown.
+ */
+export async function roadTravelMinutes(origin, clinic) {
+  const fallback = travelMinutesBetween(origin, clinic)
+  if (fallback == null) return null
+  const oLat = Number(origin.lat), oLng = Number(origin.lng)
+  const cLat = Number(clinic.latitude), cLng = Number(clinic.longitude)
+  const google = await loadGoogleMaps().catch(() => null)
+  if (!google) return fallback
+  try {
+    const svc = new google.maps.DistanceMatrixService()
+    const resp = await new Promise((resolve, reject) => {
+      svc.getDistanceMatrix(
+        {
+          origins: [{ lat: oLat, lng: oLng }],
+          destinations: [{ lat: cLat, lng: cLng }],
+          travelMode: google.maps.TravelMode.DRIVING,
+          // departureTime=now makes Google return live-traffic duration.
+          drivingOptions: { departureTime: new Date(), trafficModel: google.maps.TrafficModel.BEST_GUESS },
+        },
+        (r, status) => (status === 'OK' ? resolve(r) : reject(new Error(status))),
+      )
+    })
+    const el = resp?.rows?.[0]?.elements?.[0]
+    // Prefer duration_in_traffic (live traffic) when available, else base road time.
+    const dur = el?.duration_in_traffic || el?.duration
+    if (el?.status === 'OK' && dur) {
+      return Math.min(1440, Math.max(1, Math.round(dur.value / 60)))
+    }
+  } catch {
+    /* quota / network / no route → fall back */
+  }
+  return fallback
+}
+
+/**
  * Turn a postal address into {lat, lng} using OpenStreetMap's free Nominatim
  * geocoder (no API key). Returns null if the address can't be resolved; throws
  * only if the service itself is unreachable. Defaults the country to India.
@@ -58,6 +98,24 @@ export function travelMinutesBetween(origin, clinic) {
 export async function geocodeAddress({ address, city, state, pincode, country = 'India' } = {}) {
   const p = (s) => (s == null ? '' : String(s).trim())
   const A = p(address), C = p(city), S = p(state), P = p(pincode), K = p(country) || 'India'
+
+  // Prefer Google Geocoding when a key is configured (better Indian coverage).
+  const google = await loadGoogleMaps().catch(() => null)
+  if (google) {
+    const q = [A, C, S, P, K].filter(Boolean).join(', ')
+    if (q) {
+      try {
+        const { results } = await new google.maps.Geocoder().geocode({ address: q, region: 'in' })
+        if (results?.[0]) {
+          const loc = results[0].geometry.location
+          return { lat: loc.lat(), lng: loc.lng(), label: results[0].formatted_address }
+        }
+      } catch {
+        /* fall through to Nominatim */
+      }
+    }
+  }
+
   // Try the most specific query first, then fall back to coarser ones. A full
   // Indian street address often won't match OSM, but the city / pincode will —
   // and an area-level pin is still fine for travel-time estimates.
@@ -89,6 +147,25 @@ export async function geocodeAddress({ address, city, state, pincode, country = 
     }
   }
   return null
+}
+
+/**
+ * Free deep-link that opens the real Google Maps app/site with driving
+ * directions (origin → destination). No API call / quota — just a URL handoff,
+ * like Uber/Rapido's "Navigate". Accepts {lat,lng} or {latitude,longitude}.
+ * Returns null if the destination has no usable coordinates.
+ */
+export function mapsDirectionsUrl(origin, dest) {
+  const dLat = dest?.lat ?? dest?.latitude
+  const dLng = dest?.lng ?? dest?.longitude
+  if (dLat == null || dLng == null || (Number(dLat) === 0 && Number(dLng) === 0)) return null
+  const d = `${dLat},${dLng}`
+  const oLat = origin?.lat ?? origin?.latitude
+  const oLng = origin?.lng ?? origin?.longitude
+  if (oLat != null && oLng != null && !(Number(oLat) === 0 && Number(oLng) === 0)) {
+    return `https://www.google.com/maps/dir/?api=1&origin=${oLat},${oLng}&destination=${d}&travelmode=driving`
+  }
+  return `https://www.google.com/maps/search/?api=1&query=${d}`
 }
 
 /**

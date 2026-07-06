@@ -39,7 +39,12 @@ function Reports() {
 
   const { kpis, weekData, typeSplit } = useMemo(() => {
     const completed = appts.filter((a) => a.status === 'completed')
-    const revenue = completed.reduce((n, a) => n + Number(a.consultation_fee || 0), 0)
+    // Money ACTUALLY collected for this doctor: consultation fees that were paid
+    // (collected at the clinic) + the booking fees paid online at booking time.
+    const consultRevenue = appts.reduce(
+      (n, a) => n + (a.consultation_paid ? Number(a.consultation_fee || 0) : 0), 0)
+    const bookingRevenue = appts.reduce((n, a) => n + Number(a.booking_fee_paid || 0), 0)
+    const revenue = consultRevenue + bookingRevenue
     const patients = new Set(appts.map((a) => a.patient_id)).size
     const noShows = appts.filter((a) => a.status === 'no_show').length
 
@@ -71,7 +76,8 @@ function Reports() {
       kpis: [
         { label: 'Total Patients', value: patients, tone: 'text-brand-blue' },
         { label: 'Consultations', value: completed.length, tone: 'text-green-600' },
-        { label: 'Revenue', value: `₹${revenue.toLocaleString('en-IN')}`, tone: 'text-teal-600' },
+        { label: 'Collected', value: `₹${revenue.toLocaleString('en-IN')}`, tone: 'text-teal-600',
+          sub: `Consult ₹${consultRevenue.toLocaleString('en-IN')} · Booking ₹${bookingRevenue.toLocaleString('en-IN')}` },
         { label: 'No-shows', value: noShows, tone: 'text-orange-500' },
       ],
       weekData: WEEK.map((d) => ({ day: d, value: counts[d] })),
@@ -92,6 +98,7 @@ function Reports() {
               <Card key={k.label}>
                 <p className="text-[12.5px] font-medium text-slate-500">{k.label}</p>
                 <span className={`mt-1.5 block text-[26px] font-extrabold leading-none ${k.tone}`}>{k.value}</span>
+                {k.sub && <p className="mt-1.5 text-[11px] font-medium text-slate-400">{k.sub}</p>}
               </Card>
             ))}
           </div>

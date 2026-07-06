@@ -26,7 +26,7 @@ from .security import hash_password
 
 # Demo users — handy for exercising each role. Change/disable in production.
 DEMO_USERS = [
-    dict(role=ROLE_SUPER_ADMIN, name="Platform Owner", email="superadmin@ruralop.com",
+    dict(role=ROLE_SUPER_ADMIN, name="Platform Owner", email="superadmin@tapcure.com",
          phone="9000000001", password="Super@123", tenant=False),
     dict(role=ROLE_HOSPITAL_ADMIN, name="City Care Admin", email="admin@citycare.com",
          phone="9000000002", password="Admin@123", tenant=True),
@@ -34,7 +34,7 @@ DEMO_USERS = [
          phone="9000000003", password="Recep@123", tenant=True),
     dict(role=ROLE_DOCTOR, name="Dr. Rahul Sharma", email="doctor@citycare.com",
          phone="9000000004", password="Doctor@123", tenant=True),
-    dict(role=ROLE_PATIENT, name="Ravi Kumar", email="patient@ruralop.com",
+    dict(role=ROLE_PATIENT, name="Ravi Kumar", email="patient@tapcure.com",
          phone="9000000005", password="Patient@123", tenant=True),
 ]
 

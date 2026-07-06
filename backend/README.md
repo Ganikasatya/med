@@ -1,4 +1,4 @@
-# Rural Digital OP Queue Management Platform — Backend API
+# TapCure — Healthcare Appointment & Token Platform — Backend API
 
 Multi-tenant SaaS backend for hospital OP (outpatient) **digital token & queue
 management**, built from the full-architecture deck. FastAPI + SQLAlchemy, real
@@ -46,11 +46,11 @@ First boot creates tables and seeds the RBAC catalog + a demo tenant.
 
 | Role | Email | Password |
 |---|---|---|
-| Super Admin | `superadmin@ruralop.com` | `Super@123` |
+| Super Admin | `superadmin@tapcure.com` | `Super@123` |
 | Hospital Admin | `admin@citycare.com` | `Admin@123` |
 | Receptionist | `reception@citycare.com` | `Recep@123` |
 | Doctor | `doctor@citycare.com` | `Doctor@123` |
-| Patient | `patient@ruralop.com` | `Patient@123` |
+| Patient | `patient@tapcure.com` | `Patient@123` |
 
 Login returns `{access_token, refresh_token, user}`. Send `Authorization: Bearer <access_token>`; rotate via `POST /auth/refresh`.
 
@@ -62,7 +62,7 @@ No code changes — set the URL and migrate:
 
 ```bash
 # .env
-DATABASE_URL=postgresql+psycopg2://user:password@localhost:5432/ruralop
+DATABASE_URL=postgresql+psycopg2://user:password@localhost:5432/tapcure
 
 alembic upgrade head
 uvicorn app.main:app

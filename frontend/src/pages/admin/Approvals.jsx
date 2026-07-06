@@ -62,9 +62,14 @@ export default function Approvals() {
             <h1 className="text-2xl font-extrabold text-brand-navy">Clinic Approvals</h1>
             <p className="mt-1 text-sm text-slate-500">Review and approve clinics that have registered.</p>
           </div>
-          <button onClick={load} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-brand-navy hover:border-slate-300">
-            <RefreshCw className="h-4 w-4" /> Refresh
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => navigate('/admin/doctor-verifications')} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-brand-navy hover:border-slate-300">
+              Doctor Verifications
+            </button>
+            <button onClick={load} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-brand-navy hover:border-slate-300">
+              <RefreshCw className="h-4 w-4" /> Refresh
+            </button>
+          </div>
         </div>
 
         {msg && (

@@ -4,6 +4,7 @@ import { Card, PageHeading, ToolButton } from '../../components/clinic/ui.jsx'
 import { Banner } from '../../components/common/FormControls.jsx'
 import { usePatientCtx } from '../../context/PatientContext.jsx'
 import { patientsApi, fileUrl } from '../../api'
+import { VitalsView } from '../../components/patient/VitalsPanel.jsx'
 import { prettyDate } from '../../lib/format.js'
 import { useI18n } from '../../i18n/index.jsx'
 
@@ -20,6 +21,7 @@ function HealthRecords() {
   const [docs, setDocs] = useState([])
   const [conditions, setConditions] = useState([])
   const [allergies, setAllergies] = useState([])
+  const [vitals, setVitals] = useState(null)
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState(null)
@@ -29,14 +31,16 @@ function HealthRecords() {
     if (!patient) return
     setLoading(true)
     try {
-      const [d, h, a] = await Promise.all([
+      const [d, h, a, v] = await Promise.all([
         patientsApi.documents(patient.patient_id).catch(() => []),
         patientsApi.medicalHistory(patient.patient_id).catch(() => []),
         patientsApi.allergies(patient.patient_id).catch(() => []),
+        patientsApi.vitals(patient.patient_id).catch(() => []),
       ])
       setDocs(d || [])
       setConditions(h || [])
       setAllergies(a || [])
+      setVitals(v || [])
     } finally {
       setLoading(false)
     }
@@ -116,8 +120,14 @@ function HealthRecords() {
           )}
         </Card>
 
-        {/* Conditions + allergies */}
+        {/* Vitals + conditions + allergies */}
         <div className="flex flex-col gap-5">
+          <Card className="p-5">
+            <h3 className="mb-3 flex items-center gap-2 text-[15px] font-bold text-brand-navy">
+              <HeartPulse className="h-4 w-4 text-rose-500" /> Latest Vitals
+            </h3>
+            <VitalsView vitals={vitals} />
+          </Card>
           <Card className="p-5">
             <h3 className="mb-3 flex items-center gap-2 text-[15px] font-bold text-brand-navy">
               <HeartPulse className="h-4 w-4 text-brand-blue" /> {t('ppage.ongoingConditions')}

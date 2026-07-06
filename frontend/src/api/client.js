@@ -7,7 +7,7 @@
  *  - Throws ApiError(status, message) on non-2xx so callers can show details.
  */
 const BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-const TOKEN_KEY = 'ruralop.tokens'
+const TOKEN_KEY = 'tapcure.tokens'
 
 export class ApiError extends Error {
   constructor(status, message) {

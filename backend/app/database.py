@@ -23,12 +23,19 @@ def utcnow() -> datetime:
     # keeps all comparisons consistent across SQLite/MySQL/Postgres.
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
-# SQLite needs check_same_thread=False to be used across FastAPI's threadpool.
-_connect_args = (
-    {"check_same_thread": False}
-    if settings.database_url.startswith("sqlite")
-    else {}
-)
+# Per-driver connection args:
+#  - SQLite needs check_same_thread=False to be used across FastAPI's threadpool.
+#  - Postgres columns are timestamptz, but the app writes *naive* UTC (utcnow()).
+#    Without a fixed session timezone, Postgres interprets those naive values in
+#    the server's local tz (e.g. IST +05:30) — so stored instants come back
+#    hours off and elapsed/ETA timers read e.g. "331:26". Pinning the session
+#    timezone to UTC makes it interpret the naive UTC values as UTC.
+if settings.database_url.startswith("sqlite"):
+    _connect_args = {"check_same_thread": False}
+elif settings.database_url.startswith("postgresql"):
+    _connect_args = {"options": "-c timezone=utc"}
+else:
+    _connect_args = {}
 
 engine = create_engine(
     settings.database_url,

@@ -1,152 +1,87 @@
-import { useState } from 'react'
-import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom'
+import { NavLink, Link, useNavigate } from 'react-router-dom'
 import {
-  Home,
-  CalendarDays,
-  ClipboardList,
-  UserPlus,
-  CircleSlash,
-  Users,
-  History,
-  BellRing,
-  Clock,
-  CalendarOff,
-  IndianRupee,
-  UsersRound,
-  BarChart3,
-  PieChart,
-  Bell,
-  MessageSquare,
-  Building2,
-  UserCog,
-  Settings,
-  Headphones,
-  ChevronDown,
-  ChevronUp,
-  LogOut,
+  Home, ClipboardList, Users, Clock, BarChart3, PieChart, History,
+  Building2, Settings, Headphones, LogOut,
 } from 'lucide-react'
 import Logo from '../common/Logo.jsx'
 import { DOCTOR_NAV } from '../../data/doctorNav.js'
 import { useAuth } from '../../context/AuthContext.jsx'
 
 const ICONS = {
-  Home, CalendarDays, ClipboardList, UserPlus, CircleSlash, Users, History,
-  BellRing, Clock, CalendarOff, IndianRupee, UsersRound, BarChart3, PieChart,
-  Bell, MessageSquare, Building2, UserCog, Settings,
+  Home, ClipboardList, Users, Clock, BarChart3, PieChart, History, Building2, Settings,
 }
 
-/**
- * The handful of most-used destinations shown by default. The rest of the
- * menu is revealed with "Show all".
- */
-const QUICK_NAV = [
-  { label: 'Dashboard', to: '', icon: 'Home', end: true },
-  { label: "Today's Appointments", to: 'today', icon: 'CalendarDays' },
-  { label: 'Live OP Queue', to: 'queue', icon: 'Users' },
-  { label: 'My Availability', to: 'availability', icon: 'Clock' },
-  { label: 'Patient List', to: 'patients', icon: 'UsersRound' },
-  { label: 'Reports', to: 'reports', icon: 'BarChart3' },
-  { label: 'Notifications', to: 'notifications', icon: 'Bell' },
-]
-const QUICK_PATHS = QUICK_NAV.map((i) => i.to)
-const TOTAL_ITEMS = DOCTOR_NAV.reduce((n, g) => n + g.items.length, 0)
-const MORE_COUNT = TOTAL_ITEMS - QUICK_NAV.length
-
 const linkClass = ({ isActive }) =>
-  `flex w-full items-center gap-3 rounded-xl px-3 py-2 text-[13px] font-semibold transition-colors ${
-    isActive ? 'bg-brand-blue text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'
+  `flex w-full items-center gap-3 rounded-xl px-3 py-2 text-[13px] font-semibold transition-all ${
+    isActive
+      ? 'bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 text-teal-900 shadow-md shadow-black/25'
+      : 'text-teal-100/80 hover:bg-white/10 hover:text-white'
   }`
 
 function NavItem({ label, to, icon, end }) {
   const Icon = ICONS[icon]
   return (
     <NavLink to={to} end={end} className={linkClass}>
-      <Icon className="h-[18px] w-[18px] shrink-0" />
+      {Icon && <Icon className="h-[18px] w-[18px] shrink-0" />}
       <span className="truncate">{label}</span>
     </NavLink>
   )
 }
 
-/** Left navigation rail for the doctor console (quick list + "Show all"). */
+/** Left navigation rail for the doctor console (full grouped menu). */
 function DoctorSidebar({ open = false, onClose }) {
-  const { pathname } = useLocation()
   const navigate = useNavigate()
   const { logout } = useAuth()
-  const current = pathname.replace('/doctor-dashboard', '').replace(/^\//, '')
-  // If the active page is one of the hidden items, start expanded so it shows.
-  const [showAll, setShowAll] = useState(!QUICK_PATHS.includes(current))
 
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-50 flex h-full w-60 shrink-0 flex-col border-r border-slate-100 bg-white transition-transform duration-300 lg:static lg:z-auto lg:translate-x-0 ${
+      className={`fixed inset-y-0 left-0 z-50 flex h-full w-60 shrink-0 flex-col bg-teal-900 text-teal-100/85 transition-transform duration-300 lg:static lg:z-auto lg:translate-x-0 ${
         open ? 'translate-x-0' : '-translate-x-full'
       }`}
     >
-      <div className="px-5 pb-3 pt-5">
-        <Logo />
+      <div className="px-4 pb-3 pt-5">
+        <span className="inline-flex items-center rounded-xl bg-white px-3 py-2 shadow-sm">
+          <Logo className="h-9" />
+        </span>
       </div>
 
       <nav
         className="scrollbar-thin flex-1 overflow-y-auto px-3 pb-2"
         onClick={(e) => { if (e.target.closest('a')) onClose?.() }}
       >
-        {showAll ? (
-          /* Full grouped menu */
-          <div className="space-y-3">
-            {DOCTOR_NAV.map((group, gi) => (
-              <div key={group.section ?? `g${gi}`}>
-                {group.section && (
-                  <p className="px-3 pb-1 pt-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    {group.section}
-                  </p>
-                )}
-                <div className="space-y-0.5">
-                  {group.items.map((item) => <NavItem key={item.label} {...item} />)}
-                </div>
+        <div className="space-y-3">
+          {DOCTOR_NAV.map((group, gi) => (
+            <div key={group.section ?? `g${gi}`}>
+              {group.section && (
+                <p className="px-3 pb-1 pt-1 text-[10px] font-bold uppercase tracking-wider text-teal-200/60">
+                  {group.section}
+                </p>
+              )}
+              <div className="space-y-0.5">
+                {group.items.map((item) => <NavItem key={item.label} {...item} />)}
               </div>
-            ))}
-          </div>
-        ) : (
-          /* Compact quick list */
-          <div className="space-y-0.5">
-            {QUICK_NAV.map((item) => <NavItem key={item.label} {...item} />)}
-          </div>
-        )}
-
-        {/* Show all / Show less toggle */}
-        <button
-          onClick={() => setShowAll((v) => !v)}
-          className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-slate-200 px-3 py-2 text-[12.5px] font-semibold text-brand-blue transition-colors hover:bg-brand-blueLight/40"
-        >
-          {showAll ? (
-            <>
-              <ChevronUp className="h-4 w-4" /> Show less
-            </>
-          ) : (
-            <>
-              <ChevronDown className="h-4 w-4" /> Show all ({MORE_COUNT} more)
-            </>
-          )}
-        </button>
+            </div>
+          ))}
+        </div>
 
         {/* Logout — clears the session and returns to the public landing page. */}
         <button
           type="button"
           onClick={() => { logout(); navigate('/') }}
-          className="mt-2 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-[13px] font-semibold text-slate-600 transition-colors hover:bg-red-50 hover:text-red-500"
+          className="mt-2 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-[13px] font-semibold text-teal-100/80 transition-colors hover:bg-red-500/20 hover:text-red-200"
         >
           <LogOut className="h-[18px] w-[18px] shrink-0" /> Logout
         </button>
       </nav>
 
       {/* Need help card */}
-      <div className="m-3 flex items-center gap-3 rounded-2xl border border-slate-100 bg-brand-blueLight/60 p-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-blue text-white">
+      <div className="m-3 flex items-center gap-3 rounded-2xl bg-white/10 p-3.5">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/15 text-teal-100">
           <Headphones className="h-[18px] w-[18px]" />
         </span>
         <div className="leading-tight">
-          <h4 className="text-[13px] font-bold text-brand-navy">Need Help?</h4>
-          <Link to="/" className="text-[12px] font-semibold text-brand-blue hover:underline">
+          <h4 className="text-[13px] font-bold text-white">Need Help?</h4>
+          <Link to="/" className="text-[12px] font-semibold text-teal-200/70 hover:text-teal-100">
             Contact Support
           </Link>
         </div>

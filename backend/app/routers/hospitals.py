@@ -1,5 +1,5 @@
 """Module 2 — Hospital + settings endpoints."""
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -15,6 +15,7 @@ from ..schemas.hospital import (
 )
 from ..services import audit
 from ..services import notifications as notify
+from ..services import storage
 
 router = APIRouter(prefix="/hospitals", tags=["hospitals"])
 
@@ -117,6 +118,19 @@ def update_hospital(hospital_id: int, body: HospitalUpdate, me: User = Depends(r
     for k, v in body.model_dump(exclude_unset=True).items():
         setattr(h, k, v)
     audit.log_activity(db, me.user_id, "hospital.update", "hospital", {"hospital_id": hospital_id})
+    db.commit()
+    db.refresh(h)
+    return h
+
+
+@router.post("/{hospital_id}/logo", response_model=HospitalOut)
+def upload_hospital_logo(hospital_id: int, file: UploadFile = File(...), me: User = Depends(require_permission("hospital", "update")), db: Session = Depends(get_db)):
+    """Set/replace the clinic's logo."""
+    ensure_same_tenant(me, hospital_id)
+    h = _require(db, hospital_id)
+    storage.require_image(file)
+    url, _ = storage.save_upload("hospitals", hospital_id, file)
+    h.logo_url = url
     db.commit()
     db.refresh(h)
     return h

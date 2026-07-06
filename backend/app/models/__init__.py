@@ -24,6 +24,7 @@ from .doctor import (
     DoctorAffiliation,
     DoctorBreak,
     DoctorDelayLog,
+    DoctorDocument,
     DoctorHoliday,
     DoctorLeaveRequest,
     DoctorSchedule,
@@ -43,7 +44,10 @@ from .patient import (
     MedicalHistory,
     Patient,
     PatientDocument,
+    PatientVital,
 )
+from .payment import AppointmentPayment
+from .prescription import Prescription, PrescriptionItem
 from .reception import Receptionist, ReceptionistShift
 from .token import (
     EmergencyQueue,
@@ -70,11 +74,15 @@ __all__ = [
     "Hospital", "HospitalSettings", "Department",
     # Module 3 — Doctor
     "Doctor", "DoctorAffiliation", "DoctorSchedule", "DoctorBreak", "DoctorHoliday",
-    "DoctorDelayLog", "DoctorLeaveRequest", "DoctorStatus",
+    "DoctorDelayLog", "DoctorLeaveRequest", "DoctorStatus", "DoctorDocument",
     # Module 4 — Reception
     "Receptionist", "ReceptionistShift",
     # Module 5 — Patient
-    "Patient", "FamilyMember", "MedicalHistory", "Allergy", "PatientDocument",
+    "Patient", "FamilyMember", "MedicalHistory", "Allergy", "PatientDocument", "PatientVital",
+    # Payments
+    "AppointmentPayment",
+    # Prescriptions
+    "Prescription", "PrescriptionItem",
     # Module 6 — Appointment
     "Appointment", "ApptStatusHistory", "ApptRescheduleHistory", "ApptCancellationLog",
     # Module 7 — Token Engine

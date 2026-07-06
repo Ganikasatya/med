@@ -1,5 +1,5 @@
 /**
- * Static mock data for the Patient Dashboard (Doctor Mitra / BookMyDoctor).
+ * Static mock data for the Patient Dashboard (TapCure / TapCure).
  *
  *  ⚠️  Prototype data only — wire to the real backend later.
  *

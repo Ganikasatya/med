@@ -139,7 +139,7 @@ export const CLINIC_PROFILE = {
   doctor: 'Dr. Ramesh Kumar',
   specialty: 'General Physician',
   reg: 'KA/2018/04521',
-  email: 'citycare@doctormitra.com',
+  email: 'citycare@tapcure.com',
   phone: '+91 98765 43210',
   address: '12, MG Road, Bengaluru, Karnataka 560001',
   established: '2018',
@@ -170,7 +170,7 @@ export const SETTING_GROUPS = [
   {
     group: 'Account', items: [
       { label: 'Two-factor authentication', desc: 'Extra security at login', on: true },
-      { label: 'Show profile to patients', desc: 'List clinic publicly on Doctor Mitra', on: true },
+      { label: 'Show profile to patients', desc: 'List clinic publicly on TapCure', on: true },
     ],
   },
 ]

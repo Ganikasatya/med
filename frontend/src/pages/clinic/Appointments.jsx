@@ -1,33 +1,99 @@
-import { useState } from 'react'
-import { CalendarDays, Plus, Search, CheckCircle2, Clock, XCircle } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { CalendarDays, RefreshCw, Search, CheckCircle2, Clock, XCircle } from 'lucide-react'
 import { Card, StatusBadge, StatCard, PageHeading, ToolButton, Avatar } from '../../components/clinic/ui.jsx'
-import { APPT_STATS, APPOINTMENTS } from '../../data/clinicPagesData.js'
+import { appointmentsApi } from '../../api'
 
+// Map backend appointment.status → the human label shown in the badge / filters.
+const STATUS_LABEL = {
+  scheduled: 'Pending',
+  confirmed: 'Confirmed',
+  in_progress: 'In Consultation',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+  no_show: 'No Show',
+}
+// Filter chip → backend statuses it selects.
+const FILTERS = {
+  All: null,
+  Confirmed: ['confirmed', 'in_progress'],
+  Pending: ['scheduled'],
+  Completed: ['completed'],
+  Cancelled: ['cancelled', 'no_show'],
+}
 const STAT_ICONS = [CalendarDays, CheckCircle2, Clock, XCircle]
-const FILTERS = ['All', 'Confirmed', 'Pending', 'Completed', 'Cancelled']
+
+const today = () => new Date().toISOString().slice(0, 10)
+const prettyDate = (d) =>
+  new Date(`${d}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 
 function Appointments() {
+  const [date, setDate] = useState(today())
   const [filter, setFilter] = useState('All')
   const [q, setQ] = useState('')
-  const rows = APPOINTMENTS.filter(
-    (a) => (filter === 'All' || a.status === filter) && a.patient.toLowerCase().includes(q.toLowerCase())
-  )
+  const [appts, setAppts] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState(null)
+
+  const load = async (on = date) => {
+    setLoading(true)
+    setErr(null)
+    try {
+      setAppts(await appointmentsApi.list({ date: on, size: 200 }))
+    } catch (e) {
+      setErr(e.message || 'Could not load appointments')
+    }
+    setLoading(false)
+  }
+  useEffect(() => {
+    load(date)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date])
+
+  const stats = useMemo(() => {
+    const count = (sts) => appts.filter((a) => sts.includes(a.status)).length
+    return [
+      { value: appts.length, label: 'Total', tone: 'blue' },
+      { value: count(['confirmed', 'in_progress']), label: 'Confirmed', tone: 'green' },
+      { value: count(['scheduled']), label: 'Pending', tone: 'orange' },
+      { value: count(['cancelled', 'no_show']), label: 'Cancelled', tone: 'red' },
+    ]
+  }, [appts])
+
+  const rows = useMemo(() => {
+    const allowed = FILTERS[filter]
+    const needle = q.trim().toLowerCase()
+    return appts.filter(
+      (a) =>
+        (!allowed || allowed.includes(a.status)) &&
+        (!needle || (a.patient_name || '').toLowerCase().includes(needle))
+    )
+  }, [appts, filter, q])
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <PageHeading title="Appointments" subtitle="Manage and track all clinic appointments.">
-        <ToolButton icon={CalendarDays}>23 May 2025</ToolButton>
-        <ToolButton icon={Plus} tone="primary">Book Appointment</ToolButton>
+        <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3">
+          <CalendarDays className="h-4 w-4 text-slate-400" />
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="bg-transparent py-2 text-sm font-semibold text-brand-navy outline-none"
+          />
+        </label>
+        <ToolButton icon={RefreshCw} onClick={() => load()}>Refresh</ToolButton>
       </PageHeading>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        {APPT_STATS.map((s, i) => <StatCard key={s.label} {...s} icon={STAT_ICONS[i]} />)}
+        {stats.map((s, i) => <StatCard key={s.label} {...s} icon={STAT_ICONS[i]} />)}
       </div>
+
+      {err && <Card className="border-red-100 bg-red-50 text-sm text-red-600">{err}</Card>}
 
       <Card className="flex min-h-0 flex-1 flex-col">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex gap-1 rounded-xl bg-slate-100 p-1">
-            {FILTERS.map((f) => (
+            {Object.keys(FILTERS).map((f) => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
@@ -64,30 +130,28 @@ function Appointments() {
               </tr>
             </thead>
             <tbody className="text-[13px]">
-              {rows.map((a) => (
-                <tr key={a.id} className="border-t border-slate-50 hover:bg-slate-50/60">
-                  <td className="whitespace-nowrap py-2.5 pr-4 font-semibold text-brand-navy">{a.id}</td>
+              {!loading && rows.map((a) => (
+                <tr key={a.appointment_id} className="border-t border-slate-50 hover:bg-slate-50/60">
+                  <td className="whitespace-nowrap py-2.5 pr-4 font-semibold text-brand-navy">#{a.appointment_id}</td>
                   <td className="whitespace-nowrap py-2.5 pr-4">
                     <div className="flex items-center gap-2.5">
-                      <Avatar name={a.patient} className="h-8 w-8 text-[11px]" />
-                      <div className="leading-tight">
-                        <p className="font-semibold text-brand-navy">{a.patient}</p>
-                        <p className="text-[11px] text-slate-400">{a.age}</p>
-                      </div>
+                      <Avatar name={a.patient_name || 'Patient'} className="h-8 w-8 text-[11px]" />
+                      <p className="font-semibold text-brand-navy">{a.patient_name || 'Patient'}</p>
                     </div>
                   </td>
-                  <td className="whitespace-nowrap py-2.5 pr-4 text-slate-600">{a.doctor}</td>
-                  <td className="whitespace-nowrap py-2.5 pr-4 text-slate-500">{a.specialty}</td>
-                  <td className="whitespace-nowrap py-2.5 pr-4 text-slate-500">{a.time}</td>
-                  <td className="whitespace-nowrap py-2.5 pr-4 text-slate-500">{a.type}</td>
-                  <td className="py-2.5"><StatusBadge status={a.status} /></td>
+                  <td className="whitespace-nowrap py-2.5 pr-4 text-slate-600">{a.doctor_name || '—'}</td>
+                  <td className="whitespace-nowrap py-2.5 pr-4 text-slate-500">{a.doctor_specialty || '—'}</td>
+                  <td className="whitespace-nowrap py-2.5 pr-4 text-slate-500">{a.slot_time || '—'}</td>
+                  <td className="whitespace-nowrap py-2.5 pr-4 capitalize text-slate-500">{a.appointment_type}</td>
+                  <td className="py-2.5"><StatusBadge status={STATUS_LABEL[a.status] || a.status} /></td>
                 </tr>
               ))}
-              {rows.length === 0 && (
-                <tr><td colSpan={7} className="py-8 text-center text-sm text-slate-400">No appointments found.</td></tr>
-              )}
             </tbody>
           </table>
+          {loading && <p className="py-8 text-center text-sm text-slate-400">Loading…</p>}
+          {!loading && rows.length === 0 && (
+            <p className="py-8 text-center text-sm text-slate-400">No appointments for {prettyDate(date)}.</p>
+          )}
         </div>
       </Card>
     </div>

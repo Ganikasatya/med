@@ -56,6 +56,10 @@ class FeedbackRequest(BaseModel):
     comment: str = ""
 
 
+class CollectPaymentRequest(BaseModel):
+    method: Literal["cash", "upi", "card", "other"] = "cash"
+
+
 class AppointmentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     appointment_id: int
@@ -67,13 +71,20 @@ class AppointmentOut(BaseModel):
     managed_by_hospital: bool = True
     patient_id: int
     patient_name: Optional[str] = None
+    # Enriched for the patient history view (who they saw / where / for what).
+    doctor_name: Optional[str] = None
+    doctor_specialty: Optional[str] = None
+    hospital_name: Optional[str] = None
     family_member_id: Optional[int] = None
+    family_member_name: Optional[str] = None   # set when the visit is for a dependent
     appointment_date: date
     slot_time: Optional[time] = None
     appointment_type: str
     status: str
     consultation_fee: Decimal
     booking_fee_paid: Decimal
+    consultation_paid: bool = False
+    consultation_payment_method: Optional[str] = None
     notes: str
     source: str
     rating: Optional[int] = None

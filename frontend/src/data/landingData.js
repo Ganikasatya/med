@@ -1,5 +1,5 @@
 /**
- * Static / dummy data for the Doctor Mitra landing page.
+ * Static / dummy data for the TapCure landing page.
  * No API calls — everything here is placeholder content for the UI.
  */
 import {
@@ -22,7 +22,7 @@ import {
 } from 'lucide-react'
 
 export const BRAND = {
-  name: 'Doctor Mitra',
+  name: 'TapCure',
   city: 'Vijayawada',
 }
 
@@ -122,7 +122,7 @@ export const TESTIMONIALS = [
   {
     key: 'ramesh',
     quote:
-      'Doctor Mitra helped me save so much time. I got my token before reaching the clinic and the experience was smooth.',
+      'TapCure helped me save so much time. I got my token before reaching the clinic and the experience was smooth.',
     name: 'Ramesh B.',
     city: 'Vijayawada',
     rating: 5,
@@ -133,14 +133,14 @@ export const FEATURE_ICON = Stethoscope
 
 /**
  * Dummy credentials (UI reference only — NO auth logic wired up yet).
- *  Home user   : user@doctormitra.com   / User@123
- *  Clinic user : clinic@doctormitra.com / Clinic@123
- *  Admin       : admin@doctormitra.com  / Admin@123
+ *  Home user   : user@tapcure.com   / User@123
+ *  Clinic user : clinic@tapcure.com / Clinic@123
+ *  Admin       : admin@tapcure.com  / Admin@123
  *  Static OTP  : 123456
  */
 export const DUMMY_CREDENTIALS = {
-  home: { email: 'user@doctormitra.com', password: 'User@123' },
-  clinic: { email: 'clinic@doctormitra.com', password: 'Clinic@123' },
-  admin: { email: 'admin@doctormitra.com', password: 'Admin@123' },
+  home: { email: 'user@tapcure.com', password: 'User@123' },
+  clinic: { email: 'clinic@tapcure.com', password: 'Clinic@123' },
+  admin: { email: 'admin@tapcure.com', password: 'Admin@123' },
   otp: '123456',
 }

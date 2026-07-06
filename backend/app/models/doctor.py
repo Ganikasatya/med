@@ -25,6 +25,17 @@ LEAVE_TYPES = ("casual", "sick", "conference", "maternity")
 LEAVE_STATUSES = ("pending", "approved", "rejected", "cancelled")
 WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 PRACTICE_TYPES = ("clinic", "personal_clinic", "home", "online")
+# Manual credential verification for SELF-REGISTERED (solo) doctors. Clinic-added
+# doctors are vouched for by the clinic and default to "verified".
+VERIFICATION_STATUSES = ("verified", "pending", "rejected")
+# Document kinds a doctor uploads for verification.
+DOCTOR_DOC_TYPES = (
+    "registration_certificate",  # medical registration / council certificate
+    "degree_certificate",        # MBBS/BDS/MD/etc.
+    "council_certificate",       # state/national medical council proof
+    "id_proof",
+    "other",
+)
 
 
 class Doctor(Base):
@@ -38,6 +49,9 @@ class Doctor(Base):
     specialization: Mapped[str] = mapped_column(String(100), default="General Physician")
     qualification: Mapped[str] = mapped_column(String(200), default="")
     registration_number: Mapped[Optional[str]] = mapped_column(String(50))
+    # HPR ID — Healthcare Professionals Registry ID (ABDM). Optional now; the
+    # doctor's national professional identifier (e.g. name@hpr / 14-digit HPID).
+    hpr_id: Mapped[Optional[str]] = mapped_column(String(64), index=True)
     experience_years: Mapped[int] = mapped_column(default=0)
     consultation_fee: Mapped[float] = mapped_column(Numeric(8, 2), default=0)
     bio: Mapped[str] = mapped_column(Text, default="")
@@ -45,9 +59,20 @@ class Doctor(Base):
     languages: Mapped[str] = mapped_column(String(200), default="")  # comma-separated
     status: Mapped[str] = mapped_column(String(12), default="active")
     is_available_today: Mapped[bool] = mapped_column(Boolean, default=True)
+    # ---- Credential verification (solo self-registered doctors) ----
+    # Defaults to "verified": existing rows and clinic-onboarded doctors are
+    # trusted-by-clinic. Self-registration explicitly sets "pending".
+    verification_status: Mapped[str] = mapped_column(String(12), default="verified", index=True)
+    is_self_registered: Mapped[bool] = mapped_column(Boolean, default=False)
+    verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    verified_by: Mapped[Optional[int]] = mapped_column(BigIntPK, ForeignKey("users.user_id"))
+    rejection_reason: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
+    documents: Mapped[list["DoctorDocument"]] = relationship(
+        back_populates="doctor", cascade="all, delete-orphan"
+    )
     schedules: Mapped[list["DoctorSchedule"]] = relationship(
         back_populates="doctor", cascade="all, delete-orphan"
     )
@@ -66,6 +91,22 @@ class Doctor(Base):
     affiliations: Mapped[list["DoctorAffiliation"]] = relationship(
         back_populates="doctor", cascade="all, delete-orphan"
     )
+
+
+class DoctorDocument(Base):
+    """Credential document a doctor uploads for manual verification
+    (registration certificate, degree, council proof)."""
+    __tablename__ = "doctor_documents"
+
+    document_id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
+    doctor_id: Mapped[int] = mapped_column(BigIntPK, ForeignKey("doctors.doctor_id"), nullable=False, index=True)
+    doc_type: Mapped[str] = mapped_column(String(32), default="other")
+    label: Mapped[str] = mapped_column(String(120), default="")
+    file_url: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_size_kb: Mapped[int] = mapped_column(default=0)
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    doctor: Mapped["Doctor"] = relationship(back_populates="documents")
 
 
 class DoctorAffiliation(Base):

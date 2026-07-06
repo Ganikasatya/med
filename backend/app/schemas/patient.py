@@ -1,10 +1,27 @@
 """Schemas for Module 5 — Patient."""
-from datetime import date
+from datetime import date, datetime
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 Gender = Literal["Male", "Female", "Other"]
+
+
+def _normalize_abha_number(v: Optional[str]) -> Optional[str]:
+    """Accept an ABHA number with or without spaces/hyphens; store digits-only.
+
+    Optional — blank/None passes through as None. When given, it must be exactly
+    14 digits (the ABHA number format), otherwise it's rejected with a clear
+    message. Display formatting (XX-XXXX-XXXX-XXXX) is left to the UI.
+    """
+    if v is None:
+        return None
+    digits = "".join(ch for ch in str(v) if ch.isdigit())
+    if digits == "":
+        return None
+    if len(digits) != 14:
+        raise ValueError("ABHA number must be 14 digits")
+    return digits
 
 
 # ---- Patient ----
@@ -23,7 +40,11 @@ class PatientCreate(BaseModel):
     emergency_contact_name: Optional[str] = None
     emergency_contact_phone: Optional[str] = None
     preferred_language: str = "English"
+    abha_number: Optional[str] = None
+    abha_address: Optional[str] = None
     registration_source: Literal["app", "whatsapp", "csc", "walkin", "phone"] = "walkin"
+
+    _norm_abha = field_validator("abha_number")(_normalize_abha_number)
 
 
 class PatientUpdate(BaseModel):
@@ -39,12 +60,18 @@ class PatientUpdate(BaseModel):
     emergency_contact_name: Optional[str] = None
     emergency_contact_phone: Optional[str] = None
     preferred_language: Optional[str] = None
+    abha_number: Optional[str] = None
+    abha_address: Optional[str] = None
     is_registered: Optional[bool] = None
+
+    _norm_abha = field_validator("abha_number")(_normalize_abha_number)
 
 
 class PatientOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     patient_id: int
+    uhid: Optional[str] = None
+    photo_url: Optional[str] = None
     hospital_id: int
     name: str
     phone: str
@@ -59,8 +86,11 @@ class PatientOut(BaseModel):
     emergency_contact_name: Optional[str] = None
     emergency_contact_phone: Optional[str] = None
     preferred_language: str
+    abha_number: Optional[str] = None
+    abha_address: Optional[str] = None
     is_registered: bool
     registration_source: str
+    created_at: Optional[datetime] = None
 
 
 # ---- Family members ----
@@ -144,6 +174,61 @@ class AllergyOut(BaseModel):
     severity: str
     reaction: str
     is_active: bool
+
+
+# ---- Vitals ----
+SugarType = Literal["fasting", "random", "pp"]
+
+
+class VitalsCreate(BaseModel):
+    patient_id: int
+    appointment_id: Optional[int] = None
+    family_member_id: Optional[int] = None
+    bp_systolic: Optional[int] = Field(None, ge=40, le=300)
+    bp_diastolic: Optional[int] = Field(None, ge=20, le=200)
+    pulse: Optional[int] = Field(None, ge=20, le=300)
+    temperature_f: Optional[float] = Field(None, ge=85, le=115)
+    spo2: Optional[int] = Field(None, ge=50, le=100)
+    respiratory_rate: Optional[int] = Field(None, ge=4, le=80)
+    weight_kg: Optional[float] = Field(None, ge=0.5, le=400)
+    height_cm: Optional[float] = Field(None, ge=20, le=260)
+    blood_sugar: Optional[int] = Field(None, ge=20, le=900)
+    sugar_type: Optional[SugarType] = None
+    notes: str = ""
+
+    @field_validator("*")
+    @classmethod
+    def _blank_to_none(cls, v):
+        return None if v == "" else v
+
+
+class VitalsOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    vital_id: int
+    patient_id: int
+    appointment_id: Optional[int] = None
+    family_member_id: Optional[int] = None
+    family_member_name: Optional[str] = None
+    bp_systolic: Optional[int] = None
+    bp_diastolic: Optional[int] = None
+    pulse: Optional[int] = None
+    temperature_f: Optional[float] = None
+    spo2: Optional[int] = None
+    respiratory_rate: Optional[int] = None
+    weight_kg: Optional[float] = None
+    height_cm: Optional[float] = None
+    blood_sugar: Optional[int] = None
+    sugar_type: Optional[str] = None
+    notes: str = ""
+    recorded_at: datetime
+    recorded_by_name: Optional[str] = None
+    # Populated for clinic-wide lists (recent readings across patients).
+    patient_name: Optional[str] = None
+    patient_uhid: Optional[str] = None
+    # Derived (filled by the router via services/vitals.evaluate).
+    bmi: Optional[float] = None
+    flags: dict = {}
+    abnormal: bool = False
 
 
 # ---- Documents ----

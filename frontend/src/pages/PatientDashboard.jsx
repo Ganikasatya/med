@@ -4,7 +4,7 @@ import DashboardStub from './DashboardStub.jsx'
 function PatientDashboard() {
   return (
     <DashboardStub
-      title="Welcome to Doctor Mitra"
+      title="Welcome to TapCure"
       subtitle="Book appointments, manage tokens, and track your health."
       cards={[
         { icon: CalendarDays, label: 'Book Appointment' },

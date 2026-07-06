@@ -28,6 +28,9 @@ export const authApi = {
   logout: () => clearTokens(),
   // Public clinic onboarding (creates a pending hospital + owner admin).
   registerClinic: (payload) => api.post('/auth/register-clinic', payload, { auth: false }),
+  // Public solo-doctor onboarding — multipart FormData with credential files
+  // (creates a pending, inactive doctor awaiting Super-Admin verification).
+  registerDoctor: (formData) => api.post('/auth/register-doctor', formData, { auth: false, isForm: true }),
   // Mobile-OTP (patient, demo mode — request returns dev_otp).
   otpRequest: (phone) => api.post('/auth/otp/request', { phone }, { auth: false }),
   otpLogin: async (phone, otp) => {
@@ -46,6 +49,7 @@ export const hospitalsApi = {
   list: () => api.get('/hospitals'),
   get: (id) => api.get(`/hospitals/${id}`),
   update: (id, body) => api.put(`/hospitals/${id}`, body),
+  uploadLogo: (id, formData) => api.post(`/hospitals/${id}/logo`, formData, { isForm: true }),
   doctors: (clinicId) => api.get(`/clinics/${clinicId}/doctors`),
   pending: () => api.get('/hospitals/pending'),
   approve: (id) => api.post(`/hospitals/${id}/approve`),
@@ -56,8 +60,13 @@ export const doctorsApi = {
   list: (params) => api.get(`/doctors${qs(params)}`),
   get: (id) => api.get(`/doctors/${id}`),
   update: (id, body) => api.put(`/doctors/${id}`, body),
+  uploadPhoto: (id, formData) => api.post(`/doctors/${id}/photo`, formData, { isForm: true }),
   availability: (id, date) => api.get(`/doctors/${id}/availability${qs({ date })}`),
   onboard: (payload) => api.post('/doctors/onboard', payload),
+  // Super-Admin credential verification of self-registered (solo) doctors.
+  pending: () => api.get('/doctors/pending'),
+  verify: (id) => api.post(`/doctors/${id}/verify`),
+  reject: (id, reason = '') => api.post(`/doctors/${id}/reject`, { reason }),
   // Weekly schedule (sessions).
   schedule: (id, affiliationId) => api.get(`/doctor-schedule${qs({ doctor_id: id, affiliation_id: affiliationId })}`),
   addSchedule: (body) => api.post('/doctor-schedule', body),
@@ -97,8 +106,11 @@ export const patientsApi = {
   list: (params) => api.get(`/patients${qs(params)}`),
   get: (id) => api.get(`/patients/${id}`),
   search: (q) => api.get(`/patients/search${qs({ q })}`),
+  // Exact resolution of a scanned QR / typed UHID card (check-digit validated server-side).
+  byUhid: (code) => api.get(`/patients/by-uhid/${encodeURIComponent(code)}`),
   create: (body) => api.post('/patients', body),
   update: (id, body) => api.put(`/patients/${id}`, body),
+  uploadPhoto: (id, formData) => api.post(`/patients/${id}/photo`, formData, { isForm: true }),
   appointments: (id, params) => api.get(`/patients/${id}/appointments${qs(params)}`),
   // For a logged-in PATIENT, GET /patients is auto-scoped to their own record(s)
   // server-side (user_id == me). The first row is "my" patient profile.
@@ -112,6 +124,14 @@ export const patientsApi = {
   documents: (id) => api.get(`/patients/${id}/documents`),
   uploadDocument: (formData) => api.post('/documents', formData, { isForm: true }),
   family: (id) => api.get(`/patients/${id}/family`),
+  addFamily: (body) => api.post('/family-members', body),
+  updateFamily: (memberId, body) => api.put(`/family-members/${memberId}`, body),
+  removeFamily: (memberId) => api.del(`/family-members/${memberId}`),
+  // Vitals & measurements (nurse/reception capture at check-in).
+  vitals: (id) => api.get(`/patients/${id}/vitals`),
+  recentVitals: (params) => api.get(`/vitals/recent${qs(params)}`),
+  recordVitals: (body) => api.post('/vitals', body),
+  removeVitals: (vitalId) => api.del(`/vitals/${vitalId}`),
 }
 
 // Absolute URL for a server-stored file path (e.g. a document's file_url).
@@ -131,6 +151,26 @@ export const appointmentsApi = {
   reschedule: (body) => api.post('/appointments/reschedule', body),
   cancel: (body) => api.post('/appointments/cancel', body),
   cancellations: (params) => api.get(`/appointments/cancellations${qs(params)}`),
+  // Record the in-person consultation fee as paid (unlocks the call-next gate).
+  collectPayment: (appointmentId, method = 'cash') => api.post(`/appointments/${appointmentId}/collect-payment`, { method }),
+}
+
+// Razorpay booking-fee payments. order → checkout → confirm (server verifies).
+export const paymentsApi = {
+  config: () => api.get('/payments/config'),
+  createOrder: (booking) => api.post('/payments/appointment/order', { booking }),
+  confirm: (payload) => api.post('/payments/appointment/confirm', payload),
+  // Logged-in patient's own payment history (booking fees + clinic consultations).
+  my: () => api.get('/payments/my'),
+}
+
+export const prescriptionsApi = {
+  // PATIENT → own (patient_id ignored); staff → pass patient_id.
+  list: (patientId) => api.get(`/prescriptions${qs({ patient_id: patientId })}`),
+  forPatient: (patientId) => api.get(`/patients/${patientId}/prescriptions`),
+  get: (id) => api.get(`/prescriptions/${id}`),
+  create: (body) => api.post('/prescriptions', body),
+  remove: (id) => api.del(`/prescriptions/${id}`),
 }
 
 export const tokensApi = {
@@ -161,6 +201,7 @@ export const reportsApi = {
   noShow: (params) => api.get(`/reports/no-show${qs(params)}`),
   cancellations: (params) => api.get(`/reports/cancellations${qs(params)}`),
   patientFlow: (params) => api.get(`/reports/patient-flow${qs(params)}`),
+  clinicOverview: (params) => api.get(`/reports/clinic-overview${qs(params)}`),
 }
 
 export const notificationsApi = {

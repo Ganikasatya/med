@@ -1,11 +1,23 @@
 """Schemas for Module 3 — Doctor."""
-from datetime import date, time
+from datetime import date, datetime, time
 from decimal import Decimal
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 Weekday = Literal["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+
+def _trim_to_none(v: Optional[str]) -> Optional[str]:
+    """Normalize an optional free-form ID: trim whitespace, blank -> None.
+
+    Used for HPR ID (ABDM). Formats vary across professional types, so we don't
+    enforce a strict pattern — just store a clean value or nothing.
+    """
+    if v is None:
+        return None
+    s = str(v).strip()
+    return s or None
 
 
 # ---- Doctor ----
@@ -17,10 +29,13 @@ class DoctorCreate(BaseModel):
     specialization: str = "General Physician"
     qualification: str = ""
     registration_number: Optional[str] = None
+    hpr_id: Optional[str] = None
     experience_years: int = 0
     consultation_fee: Decimal = Decimal(0)
     bio: str = ""
     languages: str = ""
+
+    _norm_hpr = field_validator("hpr_id")(_trim_to_none)
 
 
 class DoctorOnboard(BaseModel):
@@ -28,11 +43,15 @@ class DoctorOnboard(BaseModel):
     name: str = Field(..., min_length=1)
     specialization: str = "General Physician"
     qualification: str = ""
+    registration_number: Optional[str] = None
+    hpr_id: Optional[str] = None
     experience_years: int = 0
     consultation_fee: Decimal = Decimal(0)
     department_id: Optional[int] = None
     languages: str = ""
     phone: Optional[str] = Field(None, pattern=r"^\d{10}$")
+
+    _norm_hpr = field_validator("hpr_id")(_trim_to_none)
     # Optional doctor login (so the doctor can use the Doctor console).
     create_login: bool = False
     email: Optional[EmailStr] = None
@@ -45,6 +64,7 @@ class DoctorUpdate(BaseModel):
     specialization: Optional[str] = None
     qualification: Optional[str] = None
     registration_number: Optional[str] = None
+    hpr_id: Optional[str] = None
     experience_years: Optional[int] = None
     consultation_fee: Optional[Decimal] = None
     bio: Optional[str] = None
@@ -52,6 +72,8 @@ class DoctorUpdate(BaseModel):
     languages: Optional[str] = None
     status: Optional[Literal["active", "inactive", "on_leave", "suspended"]] = None
     is_available_today: Optional[bool] = None
+
+    _norm_hpr = field_validator("hpr_id")(_trim_to_none)
 
 
 class DoctorOut(BaseModel):
@@ -64,6 +86,7 @@ class DoctorOut(BaseModel):
     specialization: str
     qualification: str
     registration_number: Optional[str] = None
+    hpr_id: Optional[str] = None
     experience_years: int
     consultation_fee: Decimal
     bio: str
@@ -71,6 +94,26 @@ class DoctorOut(BaseModel):
     languages: str
     status: str
     is_available_today: bool
+    verification_status: str = "verified"
+    is_self_registered: bool = False
+
+
+class DoctorDocumentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    document_id: int
+    doc_type: str
+    label: str
+    file_url: str
+    file_size_kb: int
+
+
+class DoctorVerificationOut(DoctorOut):
+    """Admin review payload: doctor + contact + uploaded credential documents."""
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    verified_at: Optional[datetime] = None
+    rejection_reason: Optional[str] = None
+    documents: List[DoctorDocumentOut] = []
 
 
 class AffiliationCreate(BaseModel):

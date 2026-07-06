@@ -205,6 +205,20 @@ def receptionist_report(hospital_id: int | None = Query(None), month: int | None
     return {"hospital_id": hid, "month": month or today.month, "year": year or today.year, "receptionists": out}
 
 
+@router.get("/clinic-overview")
+def clinic_overview(hospital_id: int | None = Query(None), month: int | None = Query(None), year: int | None = Query(None),
+                    me: User = Depends(require_permission("report", "read")), db: Session = Depends(get_db)):
+    """One payload for the clinic Reports page — KPIs, weekday visits, department
+    split and top doctors, across ALL of the hospital's doctors for the month."""
+    today = date.today()
+    out = rp.clinic_overview(db, _scope_hid(me, hospital_id), year or today.year, month or today.month)
+    db.commit()
+    return out
+
+
+_WEEK_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+
 @router.get("/dashboard")
 def dashboard(hospital_id: int | None = Query(None), me: User = Depends(require_permission("report", "read")), db: Session = Depends(get_db)):
     hid = _scope_hid(me, hospital_id)
@@ -213,12 +227,51 @@ def dashboard(hospital_id: int | None = Query(None), me: User = Depends(require_
     doctors = db.scalar(select(func.count(Doctor.doctor_id)).where(Doctor.hospital_id == hid)) or 0
     active = db.scalar(select(func.count(Doctor.doctor_id)).where(Doctor.hospital_id == hid, Doctor.status == "active")) or 0
     patients = db.scalar(select(func.count(Patient.patient_id)).where(Patient.hospital_id == hid)) or 0
+    rev = rp._revenue(db, tokens)  # money collected today (paid consult + booking)
+
+    # Per-doctor breakdown for today: how many OPs each doctor completed,
+    # how many are still waiting, and their total tokens. Sorted by completed.
+    doc_names = {d.doctor_id: d.name for d in db.scalars(select(Doctor).where(Doctor.hospital_id == hid)).all()}
+    by_doc: dict[int, dict] = {}
+    for t in tokens:
+        row = by_doc.setdefault(t.doctor_id, {"completed": 0, "waiting": 0, "total": 0})
+        row["total"] += 1
+        if t.status == "completed":
+            row["completed"] += 1
+        elif t.status == "waiting":
+            row["waiting"] += 1
+    by_doctor = sorted(
+        (
+            {"doctor_id": did, "name": doc_names.get(did, "Doctor"), **v}
+            for did, v in by_doc.items()
+        ),
+        key=lambda r: (r["completed"], r["total"]),
+        reverse=True,
+    )
+
+    # Real visits for the last 7 calendar days (oldest → today).
+    start = today - timedelta(days=6)
+    week_tokens = rp.tokens_in(db, start, today, hospital_id=hid)
+    day_counts: dict[date, int] = {}
+    for t in week_tokens:
+        day_counts[t.token_date] = day_counts.get(t.token_date, 0) + 1
+    visits_week = [
+        {"day": _WEEK_SHORT[(start + timedelta(days=i)).weekday()],
+         "value": day_counts.get(start + timedelta(days=i), 0)}
+        for i in range(7)
+    ]
+
     return {"hospital_id": hid, "date": today.isoformat(), "kpis": {
         "tokens_today": len(tokens),
         "completed_today": sum(1 for t in tokens if t.status == "completed"),
         "waiting_now": sum(1 for t in tokens if t.status == "waiting"),
+        "no_shows_today": sum(1 for t in tokens if t.status == "missed"),
+        # Clinic's OWN collection = consultation fees taken at the clinic. The
+        # booking fee is the platform's charge (collected online), NOT the
+        # clinic's money, so it's excluded here.
+        "revenue_today": rev["consultation"],
         "doctors": doctors, "doctors_active": active, "total_patients": patients,
-    }}
+    }, "by_doctor": by_doctor, "visits_week": visits_week}
 
 
 @router.get("/super-admin", dependencies=[Depends(require_role(ROLE_SUPER_ADMIN))])

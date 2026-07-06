@@ -5,6 +5,7 @@ import { Banner } from '../../components/common/FormControls.jsx'
 import { useDoctorCtx } from '../../context/DoctorContext.jsx'
 import { doctorsApi } from '../../api'
 import { prettyTime } from '../../lib/format.js'
+import { HolidaysPanel } from './Holidays.jsx'
 
 const WEEK_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
@@ -67,6 +68,7 @@ function Availability() {
   const [schedules, setSchedules] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [tab, setTab] = useState('weekly')   // 'weekly' | 'holidays'
 
   const load = useCallback(async () => {
     if (!doctorId) return
@@ -118,12 +120,25 @@ function Availability() {
 
   return (
     <div className="flex flex-col gap-4">
-      <PageHeading title="My Availability" subtitle={loading ? 'Loading…' : `Your weekly consulting sessions — ${total} active.`} />
+      <PageHeading title="My Availability" subtitle={tab === 'holidays' ? "Days you're unavailable." : loading ? 'Loading…' : `Your weekly consulting sessions — ${total} active.`} />
       {error && <Banner type="error">{error}</Banner>}
       {!doctorLoading && !doctorId && (
         <Banner type="error">Your doctor profile is not linked to this login yet. Please ask clinic admin to link this user to the doctor.</Banner>
       )}
 
+      {/* Tabs: weekly hours vs holidays / leave */}
+      <div className="flex w-fit gap-1 rounded-xl bg-slate-100 p-1">
+        {[['weekly', 'Weekly hours'], ['holidays', 'Holidays & leave']].map(([key, lbl]) => (
+          <button key={key} onClick={() => setTab(key)}
+            className={`rounded-lg px-4 py-1.5 text-[13px] font-semibold transition-colors ${tab === key ? 'bg-white text-brand-blue shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+            {lbl}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'holidays' ? (
+        <HolidaysPanel />
+      ) : (
       <Card>
         <div className="mb-5 flex flex-col gap-3 border-b border-slate-100 pb-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -187,6 +202,7 @@ function Availability() {
           ))}
         </div>
       </Card>
+      )}
     </div>
   )
 }

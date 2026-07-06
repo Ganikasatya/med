@@ -4,6 +4,7 @@ import { I18nProvider } from './i18n/index.jsx'
 import LandingPage from './pages/LandingPage.jsx'
 import ClinicLogin from './pages/ClinicLogin.jsx'
 import ClinicSignup from './pages/ClinicSignup.jsx'
+import DoctorSignup from './pages/DoctorSignup.jsx'
 
 import PatientLayout from './components/patient/PatientLayout.jsx'
 import PatientHome from './pages/patient/Dashboard.jsx'
@@ -55,12 +56,14 @@ import DoctorSettings from './pages/doctor/Settings.jsx'
 
 import RequireAuth from './components/common/RequireAuth.jsx'
 import Approvals from './pages/admin/Approvals.jsx'
+import DoctorVerifications from './pages/admin/DoctorVerifications.jsx'
 import AssistantLayout from './components/assistant/AssistantLayout.jsx'
 import AssistantHome from './pages/assistant/Dashboard.jsx'
 import AssistantQueue from './pages/assistant/Queue.jsx'
 import AssistantWalkIn from './pages/assistant/WalkIn.jsx'
 import AssistantAppointments from './pages/assistant/Appointments.jsx'
 import AssistantPatients from './pages/assistant/Patients.jsx'
+import AssistantVitals from './pages/assistant/Vitals.jsx'
 import AssistantNotifications from './pages/assistant/Notifications.jsx'
 
 /**
@@ -79,6 +82,7 @@ function App() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/clinic-login" element={<ClinicLogin />} />
           <Route path="/clinic-signup" element={<ClinicSignup />} />
+          <Route path="/doctor-signup" element={<DoctorSignup />} />
 
           {/* Patient console */}
           <Route
@@ -135,6 +139,16 @@ function App() {
             }
           />
 
+          {/* Super-Admin doctor credential verifications */}
+          <Route
+            path="/admin/doctor-verifications"
+            element={
+              <RequireAuth roles={['SUPER_ADMIN']} loginPath="/clinic-login">
+                <DoctorVerifications />
+              </RequireAuth>
+            }
+          />
+
           {/* Assistant (front-desk / receptionist) console */}
           <Route
             path="/assistant-dashboard"
@@ -150,7 +164,7 @@ function App() {
             <Route path="appointments" element={<AssistantAppointments />} />
             <Route path="patient-search" element={<AssistantPatients />} />
             <Route path="patients" element={<AssistantPatients />} />
-            <Route path="vitals" element={<ComingSoon title="Vitals & Measurements" subtitle="Record and track patient vitals." />} />
+            <Route path="vitals" element={<AssistantVitals />} />
             <Route path="lab-tests" element={<ComingSoon title="Lab Test Orders" subtitle="Order and track lab tests." />} />
             <Route path="medicines" element={<ComingSoon title="Medicine Dispensed" subtitle="Dispense and track medicines." />} />
             <Route path="messages" element={<ComingSoon title="Messages" subtitle="Patient and team messaging." />} />

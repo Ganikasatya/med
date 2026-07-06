@@ -3,7 +3,7 @@ import { Search } from 'lucide-react'
 import { Card, StatusBadge, PageHeading, Avatar } from '../../components/clinic/ui.jsx'
 import { useDoctorCtx } from '../../context/DoctorContext.jsx'
 import { appointmentsApi } from '../../api'
-import { prettyDate, prettyTime, statusLabel } from '../../lib/format.js'
+import { prettyDate, prettyTime, statusLabel, todayISO } from '../../lib/format.js'
 
 const FILTERS = ['All', 'Scheduled', 'Completed', 'Cancelled', 'No Show']
 const PRACTICE_FILTERS = ['All practices', 'Clinic', 'Personal']
@@ -21,6 +21,7 @@ function AllAppointments() {
   const [filter, setFilter] = useState('All')
   const [practice, setPractice] = useState('All practices')
   const [q, setQ] = useState('')
+  const [date, setDate] = useState(todayISO())   // default to today's appointments
 
   useEffect(() => {
     if (!doctorId) return
@@ -45,13 +46,14 @@ function AllAppointments() {
         practice === 'All practices' ||
         (practice === 'Personal' ? isPersonal(a) : !isPersonal(a))
       const matchSearch = !term || (p?.name || '').toLowerCase().includes(term)
-      return matchFilter && matchPractice && matchSearch
+      const matchDate = !date || (a.appointment_date || '').slice(0, 10) === date
+      return matchFilter && matchPractice && matchSearch && matchDate
     })
-  }, [appts, filter, practice, q, resolvePatient])
+  }, [appts, filter, practice, q, date, resolvePatient])
 
   return (
     <div className="flex flex-col gap-4">
-      <PageHeading title="All Appointments" subtitle="Search and review every appointment across dates.">
+      <PageHeading title="Appointments" subtitle="Showing today by default — pick a date, filter, or search.">
         <div className="flex items-center gap-2 rounded-xl border border-slate-200 px-3">
           <Search className="h-4 w-4 text-slate-400" />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search patient…"
@@ -76,6 +78,20 @@ function AllAppointments() {
                 {f}
               </button>
             ))}
+          </div>
+
+          {/* Date filter — defaults to today */}
+          <div className="ml-auto flex flex-wrap items-center gap-1">
+            <button onClick={() => setDate(todayISO())}
+              className={`rounded-lg px-3 py-1.5 text-[13px] font-semibold transition-colors ${date === todayISO() ? 'bg-brand-blue text-white' : 'bg-slate-100 text-slate-500 hover:text-slate-700'}`}>
+              Today
+            </button>
+            <button onClick={() => setDate('')}
+              className={`rounded-lg px-3 py-1.5 text-[13px] font-semibold transition-colors ${!date ? 'bg-brand-blue text-white' : 'bg-slate-100 text-slate-500 hover:text-slate-700'}`}>
+              All dates
+            </button>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[13px] font-semibold text-brand-navy outline-none focus:border-brand-blue" />
           </div>
         </div>
         <div className="overflow-x-auto">
@@ -123,7 +139,9 @@ function AllAppointments() {
         {loading || ctxLoading ? (
           <p className="py-8 text-center text-sm text-slate-400">Loading…</p>
         ) : rows.length === 0 ? (
-          <p className="py-8 text-center text-sm text-slate-400">No appointments found.</p>
+          <p className="py-8 text-center text-sm text-slate-400">
+            {date ? `No appointments on ${prettyDate(date)}.` : 'No appointments found.'}
+          </p>
         ) : null}
       </Card>
     </div>

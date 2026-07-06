@@ -95,6 +95,7 @@ function OpQueue() {
   const complete = (id) => act(() => tokensApi.complete(id))
   const skip = (id) => act(() => tokensApi.skip(id))
   const recall = (id) => act(() => tokensApi.recall(id))
+  const collect = (apptId, method = 'cash') => act(() => appointmentsApi.collectPayment(apptId, method))
 
   const generateWalkIn = (e) => {
     e.preventDefault()
@@ -203,7 +204,7 @@ function OpQueue() {
                         <th className="pb-2 font-semibold">Token</th>
                         <th className="pb-2 font-semibold">Patient</th>
                         <th className="pb-2 font-semibold">Pos.</th>
-                        <th className="pb-2 font-semibold">Status</th>
+                        <th className="pb-2 font-semibold">Payment</th>
                         <th className="pb-2 text-right font-semibold">Action</th>
                       </tr>
                     </thead>
@@ -213,7 +214,15 @@ function OpQueue() {
                           <td className="whitespace-nowrap py-2 pr-3 font-semibold text-brand-navy">{t.display_code}</td>
                           <td className="whitespace-nowrap py-2 pr-3 text-slate-600">{t.patient_name || '—'}</td>
                           <td className="py-2 pr-3 text-slate-500">{t.queue_position}</td>
-                          <td className="py-2 pr-3"><StatusBadge status={t.status} /></td>
+                          <td className="py-2 pr-3">
+                            {t.consultation_fee > 0 && !t.consultation_paid ? (
+                              <button disabled={busy} onClick={() => collect(t.appointment_id)} className="inline-flex items-center gap-1 rounded-lg bg-amber-500 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-amber-600 disabled:opacity-60">
+                                Collect ₹{t.consultation_fee}
+                              </button>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700"><CheckCircle2 className="h-3 w-3" /> Paid</span>
+                            )}
+                          </td>
                           <td className="py-2 text-right">
                             <button disabled={busy} onClick={() => skip(t.token_id)} title="Skip" className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-500 hover:bg-slate-50 disabled:opacity-60">
                               <SkipForward className="h-3.5 w-3.5" /> Skip

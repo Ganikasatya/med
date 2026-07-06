@@ -15,8 +15,8 @@ import {
   ArrowRight,
   Hash,
 } from 'lucide-react'
-import PageHeader from '../components/common/PageHeader.jsx'
 import { TextInput, PasswordInput, SelectInput, Banner } from '../components/common/FormControls.jsx'
+import AddressAutocomplete from '../components/common/AddressAutocomplete.jsx'
 import { authApi } from '../api'
 import {
   CLINIC_TYPES,
@@ -95,9 +95,13 @@ function ClinicSignup() {
         clinic_name: form.clinicName,
         clinic_type: form.clinicType,
         registration_number: form.regNo,
+        hfr_id: form.hfrId?.trim() || null,
         city: form.city,
         area: form.area,
         address: form.address,
+        pincode: form.pincode || '',
+        latitude: form.latitude ?? null,
+        longitude: form.longitude ?? null,
         owner_name: form.ownerName,
         phone: form.mobile,
         email: form.email,
@@ -118,19 +122,17 @@ function ClinicSignup() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-brand-blueLight via-white to-blue-50">
-      <PageHeader />
-
-      <main className="mx-auto max-w-[1400px] px-6 py-7">
+    <div className="theme-reception min-h-screen bg-[#f2ecdf]">
+      <main className="mx-auto max-w-[1400px] px-6 py-8 lg:py-10">
         {/* Title + registration photo (top-right, where the illustration was).
             The band reserves height so the photo never overlaps the stepper. */}
         <div className="relative min-h-[160px]">
           <h1 className="text-[30px] font-extrabold text-brand-navy">
-            Register your clinic with <span className="text-brand-blue">Doctor</span>
-            <span className="text-brand-green">Mitra</span>
+            Register your clinic with <span className="text-brand-navy">Tap</span>
+            <span className="bg-gradient-to-r from-brand-blue via-brand-teal to-brand-green bg-clip-text text-transparent">Cure</span>
           </h1>
           <p className="mt-1.5 text-sm text-slate-500">
-            Join Doctor Mitra and grow your practice by connecting with more patients.
+            Join TapCure and grow your practice by connecting with more patients.
           </p>
 
           <div className="absolute -top-3 right-0 hidden w-[480px] xl:block">
@@ -140,7 +142,7 @@ function ClinicSignup() {
             {/* Blended into the page background with soft faded edges (no card/patch) */}
             <img
               src="/clinic-register-banner.png"
-              alt="Patient registering at a Doctor Mitra clinic reception"
+              alt="Patient registering at a TapCure clinic reception"
               className="h-[170px] w-full object-cover object-center"
               style={{
                 WebkitMaskImage:
@@ -193,6 +195,7 @@ function ClinicSignup() {
                 {CLINIC_TYPES.map((t) => <option key={t}>{t}</option>)}
               </SelectInput>
               <TextInput label="Registration Number" required icon={Hash} placeholder="Enter registration number" value={form.regNo || ''} onChange={set('regNo')} error={errors.regNo} />
+              <TextInput label="HFR ID (optional)" icon={Hash} placeholder="ABDM Health Facility Registry ID, if any" value={form.hfrId || ''} onChange={set('hfrId')} />
               <div className="grid grid-cols-2 gap-3">
                 <SelectInput label="City" required value={form.city || ''} onChange={set('city')} error={errors.city}>
                   <option value="">Select city</option>
@@ -200,7 +203,32 @@ function ClinicSignup() {
                 </SelectInput>
                 <TextInput label="Area / Locality" required placeholder="Enter area" value={form.area || ''} onChange={set('area')} error={errors.area} />
               </div>
-              <TextInput label="Full Address" required icon={MapPin} placeholder="Enter complete address" value={form.address || ''} onChange={set('address')} error={errors.address} />
+              <div>
+                <label className="mb-1.5 block text-[13px] font-semibold text-slate-700">
+                  Full Address<span className="text-red-500"> *</span>
+                </label>
+                <AddressAutocomplete
+                  value={form.address || ''}
+                  onChange={(val) => { setForm((f) => ({ ...f, address: val })); setErrors((er) => ({ ...er, address: undefined })) }}
+                  onSelect={(p) => setForm((f) => ({
+                    ...f,
+                    address: p.label || f.address,
+                    latitude: p.lat, longitude: p.lng,
+                    pincode: p.pincode || f.pincode,
+                    area: f.area || p.city || '',
+                  }))}
+                  placeholder="Search your clinic on Google Maps…"
+                  className={`flex w-full items-center gap-2.5 rounded-xl border bg-white px-3.5 py-2.5 pr-9 text-sm text-brand-navy outline-none transition-colors focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/10 ${errors.address ? 'border-red-300' : 'border-slate-200'}`}
+                />
+                {errors.address && <p className="mt-1 text-xs text-red-500">{errors.address}</p>}
+                <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-slate-400">
+                  <MapPin className="h-3.5 w-3.5 text-brand-blue" />
+                  Pick your clinic from the suggestions for an accurate map location.
+                  {form.latitude != null && form.longitude != null && (
+                    <span className="font-semibold text-brand-green">· Location pinned ✓</span>
+                  )}
+                </p>
+              </div>
               <p className="flex items-center gap-1.5 text-[11px] text-slate-400">
                 <CheckCircle2 className="h-3.5 w-3.5 text-brand-green" /> Your clinic details are secure and safe with us.
               </p>
@@ -284,7 +312,7 @@ function ClinicSignup() {
           <div className="mt-6 flex justify-center">
             <button
               disabled={busy}
-              className="flex items-center gap-2 rounded-xl bg-brand-blue px-10 py-3.5 text-sm font-semibold text-white shadow-card transition-colors hover:bg-brand-blueDark disabled:opacity-60"
+              className="flex items-center gap-2 rounded-2xl bg-gradient-to-r from-teal-600 to-green-600 px-10 py-3.5 text-sm font-bold text-white shadow-sm transition-transform hover:scale-[1.01] disabled:opacity-60"
             >
               <Building2 className="h-4 w-4" />
               {busy ? 'Submitting…' : 'Submit Clinic Registration'}

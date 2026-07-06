@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Phone, ShieldCheck, User, MapPin, Mic, ArrowLeft, ArrowDown, Volume2, Sparkles, Square } from 'lucide-react'
+import { Phone, ShieldCheck, User, MapPin, Fingerprint, Mic, ArrowLeft, ArrowDown, Volume2, Sparkles, Square } from 'lucide-react'
 import { Banner } from '../common/FormControls.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { useI18n, LANGS } from '../../i18n/index.jsx'
-import { speak, listen, stopSpeaking, parseDigits, parseName, sttSupported } from '../../lib/voice.js'
+import { speak, listen, stopSpeaking, speakTurn, parseDigits, parseName, sttSupported } from '../../lib/voice.js'
 import { canRecord, cloudVoiceAvailable, startRecording, transcribe } from '../../lib/voiceAgent.js'
 
 const mobileRe = /^\d{10}$/
@@ -124,6 +124,7 @@ function PatientVoiceAuth({ onClose }) {
   const [phone, setPhone] = useState('')
   const [name, setName] = useState('')
   const [city, setCity] = useState('')
+  const [abhaNumber, setAbhaNumber] = useState('')
   const [otp, setOtp] = useState('')
   const [banner, setBanner] = useState(null) // { type, msg }
   const [busy, setBusy] = useState(false)
@@ -177,7 +178,7 @@ function PatientVoiceAuth({ onClose }) {
     setBusy(true)
     try {
       const u = mode === 'register'
-        ? await registerOtp({ phone, otp, name: name.trim(), city: city.trim() || null })
+        ? await registerOtp({ phone, otp, name: name.trim(), city: city.trim() || null, abha_number: abhaNumber.trim() || null })
         : await loginOtp(phone, otp)
       finish(u)
     } catch (e) {
@@ -222,8 +223,13 @@ function PatientVoiceAuth({ onClose }) {
     const say = async (key) => {
       if (cancelled()) return
       setGuidePhase('speaking')
+      const before = speakTurn()
       await speak(t(key), speech)
       setGuidePhase(null)
+      // If a newer voice took over while we were speaking (e.g. the user pressed
+      // a field mic or switched language), abort the guide instead of talking
+      // over it — the existing cancelled() checks after each step do the rest.
+      if (speakTurn() !== before + 1) cancelRef.current = true
     }
     const hear = async (parse, ms = 8000) => {
       if (cancelled()) return ''
@@ -310,8 +316,24 @@ function PatientVoiceAuth({ onClose }) {
     }
   }, [lang, runGuide])
 
-  // Stop any narration if the modal unmounts.
-  useEffect(() => () => stopSpeaking(), [])
+  // Stop the guide + narration if the modal unmounts (tab closed / navigated away).
+  // stopSpeaking() alone only cancels the clip that's playing right now — the async
+  // runGuide loop would carry on to its next prompt and start talking again. Setting
+  // the cancel flag makes the loop bail at its next checkpoint.
+  useEffect(() => () => { cancelRef.current = true; stopSpeaking() }, [])
+
+  // Stop the voice guide when the browser tab is hidden (user switched tabs or
+  // minimised the window) — otherwise the narration keeps playing in the
+  // background tab. pagehide covers navigating away / closing the tab.
+  useEffect(() => {
+    const onHidden = () => { if (document.hidden) stopGuide() }
+    document.addEventListener('visibilitychange', onHidden)
+    window.addEventListener('pagehide', stopGuide)
+    return () => {
+      document.removeEventListener('visibilitychange', onHidden)
+      window.removeEventListener('pagehide', stopGuide)
+    }
+  }, [stopGuide])
 
   const guideTarget = (f) => guideOn && guideField === f
 
@@ -323,7 +345,7 @@ function PatientVoiceAuth({ onClose }) {
           <button
             key={code}
             type="button"
-            onClick={() => setLang(code)}
+            onClick={() => { stopSpeaking(); if (guideOn) stopGuide(); setLang(code) }}
             className={`rounded-full px-3 py-1 text-[12px] font-semibold transition-colors ${
               lang === code ? 'bg-brand-blue text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
@@ -333,19 +355,23 @@ function PatientVoiceAuth({ onClose }) {
         ))}
       </div>
 
-      {/* Guided voice walkthrough control */}
-      <button
-        type="button"
-        onClick={() => (guideOn ? stopGuide() : runGuide())}
-        className={`flex w-full items-center justify-center gap-2 rounded-xl border py-2 text-[13px] font-semibold transition-colors ${
-          guideOn
-            ? 'border-red-200 bg-red-50 text-red-600 hover:bg-red-100'
-            : 'border-brand-blue/30 bg-brand-blueLight text-brand-blue hover:bg-brand-blue hover:text-white'
-        }`}
-      >
-        {guideOn ? <Square className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
-        {guideOn ? t('guide.stop') : t('guide.start')}
-      </button>
+      {/* Guided voice walkthrough control — registration helper only. Hidden
+          once the OTP has been sent so it can't restart the guide (and wipe the
+          user's OTP progress) after registration. */}
+      {step !== 'otp' && (
+        <button
+          type="button"
+          onClick={() => (guideOn ? stopGuide() : runGuide())}
+          className={`flex w-full items-center justify-center gap-2 rounded-xl border py-2 text-[13px] font-semibold transition-colors ${
+            guideOn
+              ? 'border-red-200 bg-red-50 text-red-600 hover:bg-red-100'
+              : 'border-brand-blue/30 bg-brand-blueLight text-brand-blue hover:bg-brand-blue hover:text-white'
+          }`}
+        >
+          {guideOn ? <Square className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
+          {guideOn ? t('guide.stop') : t('guide.start')}
+        </button>
+      )}
 
       {/* Login / Register toggle */}
       <div className="flex gap-1 rounded-xl bg-slate-100 p-1">
@@ -380,6 +406,9 @@ function PatientVoiceAuth({ onClose }) {
           <VoiceField icon={Phone} kind="digits" maxLength={10} label={t('auth.mobileLabel')} prompt={t('auth.mobilePrompt')} value={phone} onChange={setPhone} placeholder="9876543210" onVoiceError={(m) => setBanner({ type: 'error', msg: m })} active={guideTarget('mobile')} bubble={t('guide.mobileBubble')} phase={guideTarget('mobile') ? guidePhase : null} />
           {mode === 'register' && (
             <VoiceField icon={MapPin} kind="text" label={t('auth.cityLabel')} prompt={t('auth.cityLabel')} value={city} onChange={setCity} placeholder={t('auth.cityLabel')} onVoiceError={(m) => setBanner({ type: 'error', msg: m })} active={guideTarget('city')} bubble={t('guide.cityBubble')} phase={guideTarget('city') ? guidePhase : null} />
+          )}
+          {mode === 'register' && (
+            <VoiceField icon={Fingerprint} kind="digits" maxLength={14} label={t('auth.abhaLabel')} prompt={t('auth.abhaPrompt')} value={abhaNumber} onChange={setAbhaNumber} placeholder="12-3456-7890-1234" onVoiceError={(m) => setBanner({ type: 'error', msg: m })} />
           )}
           <button type="button" disabled={busy} onClick={sendOtp} className="w-full rounded-xl bg-brand-blue py-3 text-sm font-semibold text-white transition-colors hover:bg-brand-blueDark disabled:opacity-60">
             {t('auth.sendOtp')}

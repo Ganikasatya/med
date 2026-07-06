@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { UserPlus, Phone, CheckCircle2, Ticket, Clock, Stethoscope, AlertTriangle } from 'lucide-react'
 import { Card, PageHeading, Avatar } from '../../components/clinic/ui.jsx'
 import { TextInput } from '../../components/common/FormControls.jsx'
-import { doctorsApi, appointmentsApi, tokensApi } from '../../api'
+import { doctorsApi, appointmentsApi, tokensApi, patientsApi } from '../../api'
 
 const PRIORITIES = [
   { value: 'normal', label: 'Normal', cls: 'bg-slate-100 text-slate-600 border-slate-200' },
@@ -18,6 +18,9 @@ export default function AssistantWalkIn() {
   const [busy, setBusy] = useState(false)
   const [issued, setIssued] = useState([])
   const [banner, setBanner] = useState(null)
+  const [match, setMatch] = useState(null)        // existing patient on this phone (this hospital)
+  const [checking, setChecking] = useState(false)
+  const [useMatch, setUseMatch] = useState(false) // reception confirmed to use the matched record
 
   useEffect(() => {
     doctorsApi.list().then((d) => {
@@ -25,6 +28,29 @@ export default function AssistantWalkIn() {
       if (d.length) setForm((f) => ({ ...f, doctor_id: String(d[0].doctor_id) }))
     })
   }, [])
+
+  // Look up an existing patient as soon as a full mobile number is entered, so a
+  // returning patient is matched (not re-registered) and reception confirms it.
+  useEffect(() => {
+    const phone = form.phone
+    setUseMatch(false)
+    if (!/^\d{10}$/.test(phone)) { setMatch(null); return }
+    setChecking(true)
+    const id = setTimeout(() => {
+      patientsApi.search(phone)
+        .then((rows) => setMatch((rows || []).find((p) => p.phone === phone) || null))
+        .catch(() => setMatch(null))
+        .finally(() => setChecking(false))
+    }, 350)
+    return () => clearTimeout(id)
+  }, [form.phone])
+
+  const applyMatch = () => {
+    if (!match) return
+    setForm((f) => ({ ...f, name: match.name }))
+    setUseMatch(true)
+    setErrors((e) => ({ ...e, name: undefined, match: undefined }))
+  }
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
@@ -34,6 +60,9 @@ export default function AssistantWalkIn() {
     if (!form.doctor_id) err.doctor_id = 'Select a doctor'
     if (!form.name.trim()) err.name = 'Required'
     if (!/^\d{10}$/.test(form.phone)) err.phone = 'Enter a valid 10-digit number'
+    // If this number already belongs to a patient, make reception acknowledge it
+    // (the visit attaches to that record — no second registration is created).
+    if (match && !useMatch) err.match = 'This number is already registered — confirm the patient below.'
     setErrors(err)
     if (Object.keys(err).length) return
 
@@ -49,6 +78,8 @@ export default function AssistantWalkIn() {
       ])
       setBanner({ type: 'success', msg: `Token ${token.display_code} issued — est. wait ~${estimate?.wait_min ?? '—'} min` })
       setForm((f) => ({ ...f, name: '', phone: '', priority: 'normal' }))
+      setMatch(null)
+      setUseMatch(false)
     } catch (e2) {
       setBanner({ type: 'error', msg: e2.message || 'Could not register walk-in' })
     }
@@ -81,6 +112,44 @@ export default function AssistantWalkIn() {
 
               <TextInput icon={UserPlus} placeholder="Patient Name" value={form.name} onChange={set('name')} error={errors.name} />
               <TextInput icon={Phone} prefix="+91" placeholder="Mobile Number" inputMode="numeric" maxLength={10} value={form.phone} onChange={set('phone')} error={errors.phone} />
+
+              {/* Existing-patient match → confirm (no duplicate registration) */}
+              <AnimatePresence>
+                {checking && (
+                  <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-[12px] text-slate-400">
+                    Checking this number…
+                  </motion.p>
+                )}
+                {match && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, height: 0 }}
+                    className={`rounded-xl border p-3 ${useMatch ? 'border-emerald-200 bg-emerald-50/60' : 'border-amber-200 bg-amber-50/70'}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Avatar name={match.name} className="h-10 w-10 text-[12px]" />
+                      <div className="min-w-0 flex-1 leading-tight">
+                        <p className={`text-[10px] font-bold uppercase tracking-wide ${useMatch ? 'text-emerald-600' : 'text-amber-600'}`}>
+                          {useMatch ? 'Using existing record' : 'Existing patient found'}
+                        </p>
+                        <p className="truncate text-[14px] font-bold text-brand-navy">{match.name}</p>
+                        <p className="text-[11.5px] text-slate-500">{[match.uhid, match.phone].filter(Boolean).join(' · ')}</p>
+                      </div>
+                      {useMatch ? (
+                        <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
+                      ) : (
+                        <button type="button" onClick={applyMatch} className="shrink-0 rounded-lg bg-brand-blue px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-brand-blueDark">
+                          Use this patient
+                        </button>
+                      )}
+                    </div>
+                    <p className="mt-2 text-[11.5px] text-slate-500">
+                      This walk-in will be added to this patient's record — no new registration.
+                      {!useMatch && ' Confirm to continue.'}
+                    </p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              {errors.match && !useMatch && <p className="-mt-1 text-xs text-red-500">{errors.match}</p>}
 
               <div>
                 <label className="mb-1.5 block text-[13px] font-semibold text-slate-600">Priority</label>

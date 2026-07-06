@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Outlet } from 'react-router-dom'
 import DoctorSidebar from './DoctorSidebar.jsx'
 import DoctorTopbar from './DoctorTopbar.jsx'
@@ -16,9 +16,15 @@ import { DoctorProvider } from '../../context/DoctorContext.jsx'
  */
 function DoctorLayout() {
   const [navOpen, setNavOpen] = useState(false)
+  const [dark, setDark] = useState(() => localStorage.getItem('doctor-theme') === 'dark')
+
+  useEffect(() => {
+    localStorage.setItem('doctor-theme', dark ? 'dark' : 'light')
+  }, [dark])
+
   return (
     <DoctorProvider>
-      <div className="flex h-screen w-screen overflow-hidden bg-slate-50">
+      <div className={`theme-reception ${dark ? 'theme-dark' : ''} flex h-screen w-screen overflow-hidden bg-slate-50`}>
         <DoctorSidebar open={navOpen} onClose={() => setNavOpen(false)} />
         {navOpen && (
           <div
@@ -28,7 +34,7 @@ function DoctorLayout() {
           />
         )}
         <div className="flex min-w-0 flex-1 flex-col">
-          <DoctorTopbar onMenu={() => setNavOpen(true)} />
+          <DoctorTopbar onMenu={() => setNavOpen(true)} dark={dark} onToggleTheme={() => setDark((d) => !d)} />
           <main className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-4 sm:p-6">
             <Outlet />
           </main>

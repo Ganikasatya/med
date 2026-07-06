@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useLocation } from 'react-router-dom'
-import { Clock, MapPin, IndianRupee, X, CalendarClock, Navigation, Timer, Footprints } from 'lucide-react'
+import { Clock, MapPin, IndianRupee, X, CalendarClock, Navigation, Timer, Footprints, UserRound } from 'lucide-react'
 import { Card, StatusBadge, Avatar, PageHeading, ToolButton } from '../../components/clinic/ui.jsx'
 import { SelectInput, TextInput, Banner } from '../../components/common/FormControls.jsx'
 import { usePatientCtx } from '../../context/PatientContext.jsx'
 import { appointmentsApi, patientsApi, tokensApi } from '../../api'
 import { dateChip, prettyTime, prettyDate, statusLabel, todayISO, clockIST } from '../../lib/format.js'
+import { mapsDirectionsUrl } from '../../lib/geo.js'
 import { useI18n } from '../../i18n/index.jsx'
 
 const ACTIVE_STATUSES = ['scheduled', 'booked', 'confirmed', 'pending', 'checked_in', 'in_progress']
@@ -102,6 +103,11 @@ function ApptRow({ appt, doctor, clinic, onCancel, onReschedule, canManage }) {
       <div className="min-w-[160px] leading-tight">
         <p className="text-[15px] font-bold text-brand-navy">{doctorName}</p>
         <p className="text-[12.5px] text-slate-500">{doctor?.specialization || appt.appointment_type}</p>
+        {appt.family_member_name && (
+          <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-purple-50 px-2 py-0.5 text-[10.5px] font-semibold text-purple-600">
+            <UserRound className="h-3 w-3" /> For {appt.family_member_name}
+          </span>
+        )}
       </div>
       <div className="flex items-center gap-2">
         <div className="rounded-lg bg-brand-blueLight px-3 py-1.5 text-center">
@@ -149,6 +155,7 @@ function TravelPlanCard({ appt, doctor, clinic }) {
   const { t } = useI18n()
   const [est, setEst] = useState(null)
   const [phase, setPhase] = useState('loading') // loading | pending | ready
+  const navUrl = mapsDirectionsUrl({ lat: appt.origin_lat, lng: appt.origin_lng }, clinic)
 
   useEffect(() => {
     let active = true
@@ -242,6 +249,19 @@ function TravelPlanCard({ appt, doctor, clinic }) {
             </p>
           )}
         </div>
+      )}
+
+      {navUrl && (
+        <a
+          href={navUrl}
+          target="_blank"
+          rel="noreferrer"
+          className={`mt-3 inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[12.5px] font-bold text-white transition-colors ${
+            leaveNow ? 'bg-amber-500 hover:bg-amber-600' : 'bg-brand-blue hover:bg-brand-blueDark'
+          }`}
+        >
+          <Navigation className="h-4 w-4" /> Open in Google Maps
+        </a>
       )}
     </div>
   )

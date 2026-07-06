@@ -26,7 +26,7 @@ import {
 } from 'lucide-react'
 
 export const DUMMY = {
-  patient: [{ email: 'patient@ruralop.com', password: 'Patient@123' }],
+  patient: [{ email: 'patient@tapcure.com', password: 'Patient@123' }],
   doctor: [{ email: 'doctor@citycare.com', password: 'Doctor@123' }],
   clinic: [
     { email: 'admin@citycare.com', password: 'Admin@123' },
@@ -55,7 +55,7 @@ export const AUTH_ROLES = {
     },
     signup: {
       title: 'Create your account',
-      subtitle: 'Join Doctor Mitra to book appointments and get tokens faster.',
+      subtitle: 'Join TapCure to book appointments and get tokens faster.',
     },
   },
   doctor: {
@@ -76,7 +76,7 @@ export const AUTH_ROLES = {
     },
     signup: {
       title: 'Create your doctor account',
-      subtitle: 'Join Doctor Mitra to manage your practice digitally.',
+      subtitle: 'Join TapCure to manage your practice digitally.',
     },
   },
 }

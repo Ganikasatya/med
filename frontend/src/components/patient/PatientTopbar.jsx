@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Menu, Bell, ChevronDown, Globe } from 'lucide-react'
+import { useNavigate, Link } from 'react-router-dom'
+import { Menu, Bell, ChevronDown, Globe, Sun, Moon } from 'lucide-react'
+import Logo from '../common/Logo.jsx'
 import { usePatientCtx } from '../../context/PatientContext.jsx'
 import { notificationsApi } from '../../api'
 import { useI18n, LANGS } from '../../i18n/index.jsx'
@@ -12,12 +13,20 @@ function initialsOf(name = '') {
   return (parts[0][0] + (parts[1]?.[0] || '')).toUpperCase()
 }
 
+/** Time-of-day greeting i18n key. */
+function greetingKey() {
+  const h = new Date().getHours()
+  if (h < 12) return 'pdash.greetingMorning'
+  if (h < 17) return 'pdash.greetingAfternoon'
+  return 'pdash.greetingEvening'
+}
+
 /**
  * Patient console top bar: menu toggle (decorative for now) on the left;
  * language selector, notifications and the patient profile chip on the right.
  * Backed by the logged-in patient record from PatientContext.
  */
-function PatientTopbar({ onMenu }) {
+function PatientTopbar({ onMenu, dark, onToggleTheme }) {
   const navigate = useNavigate()
   const { patient } = usePatientCtx()
   const { t, lang, setLang } = useI18n()
@@ -43,15 +52,28 @@ function PatientTopbar({ onMenu }) {
   const name = patient?.name || t('pnav.patient')
 
   return (
-    <header className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-100 bg-white px-6 py-3">
-      {/* Left: menu */}
-      <button
-        className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-50"
-        aria-label="Toggle menu"
-        onClick={onMenu}
-      >
-        <Menu className="h-5 w-5" />
-      </button>
+    <header className="relative flex shrink-0 items-center justify-between gap-4 border-b border-slate-100 bg-white px-4 py-2.5 sm:px-6">
+      {/* Left: menu (mobile) + logo */}
+      <div className="flex items-center gap-2">
+        <button
+          className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-50 lg:hidden"
+          aria-label="Toggle menu"
+          onClick={onMenu}
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+        <Link to="/patient-dashboard" className="flex items-center">
+          <Logo className="h-10" />
+        </Link>
+      </div>
+
+      {/* Greeting — centered in the topbar (moved up from the dashboard page) */}
+      <div className="pointer-events-none absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 text-center lg:block">
+        <p className="text-[22px] font-extrabold leading-tight text-brand-navy">
+          {t(greetingKey())}, {name}
+        </p>
+        <p className="text-[13px] text-slate-500">{t('pdash.greetingLine')}</p>
+      </div>
 
       {/* Right: language + notifications + profile */}
       <div className="flex items-center gap-4">
@@ -83,6 +105,15 @@ function PatientTopbar({ onMenu }) {
             </>
           )}
         </div>
+
+        <button
+          onClick={onToggleTheme}
+          className="text-slate-500 hover:text-brand-blue"
+          aria-label={dark ? 'Switch to light theme' : 'Switch to dark theme'}
+          title={dark ? 'Light mode' : 'Dark mode'}
+        >
+          {dark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+        </button>
 
         <button
           className="relative text-slate-500 hover:text-brand-blue"

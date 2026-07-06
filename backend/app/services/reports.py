@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from ..database import utcnow
 from ..models import (
-    Appointment, DailyReport, DepartmentReport, Doctor, DoctorAffiliation,
+    Appointment, DailyReport, Department, DepartmentReport, Doctor, DoctorAffiliation,
     DoctorDelayLog, DoctorReport, MonthlyReport, Patient, Token,
 )
 
@@ -49,16 +49,24 @@ def tokens_in(db: Session, start: date, end: date, *, hospital_id=None, doctor_i
     return list(db.scalars(stmt).all())
 
 
-def _revenue(db: Session, completed: list[Token]) -> float:
-    appt_ids = [t.appointment_id for t in completed if t.appointment_id]
+def _revenue(db: Session, tokens: list[Token]) -> dict:
+    """Money actually collected for these tokens' appointments:
+        consultation fees that were PAID (collected at the clinic)
+      + booking fees (the ₹ collected online at booking).
+    Returns a breakdown so reports can show where the money came from. The caller
+    already scopes `tokens` (clinic = all doctors; a doctor = only their own), so
+    this is correct for both the clinic and doctor views."""
+    appt_ids = list({t.appointment_id for t in tokens if t.appointment_id})
     if not appt_ids:
-        return 0.0
+        return {"total": 0.0, "consultation": 0.0, "booking": 0.0}
     rows = db.execute(
-        select(Appointment.appointment_id, Appointment.consultation_fee).where(
-            Appointment.appointment_id.in_(appt_ids)
-        )
+        select(
+            Appointment.consultation_fee, Appointment.consultation_paid, Appointment.booking_fee_paid
+        ).where(Appointment.appointment_id.in_(appt_ids))
     ).all()
-    return float(sum((fee or 0) for _, fee in rows))
+    consultation = float(sum((fee or 0) for fee, paid, _ in rows if paid))
+    booking = float(sum((bf or 0) for _, _, bf in rows))
+    return {"total": consultation + booking, "consultation": consultation, "booking": booking}
 
 
 def _peak_hour(tokens: list[Token]) -> str | None:
@@ -77,6 +85,7 @@ def aggregate(db: Session, tokens: list[Token]) -> dict:
     cancelled = [t for t in tokens if t.status == "cancelled"]
     waits = [t.wait_duration_mins for t in completed if t.wait_duration_mins is not None]
     consults = [t.consult_duration_mins for t in completed if t.consult_duration_mins is not None]
+    rev = _revenue(db, tokens)  # collected money for ALL tokens in scope (paid consult + booking)
     return {
         "total_tokens": len(tokens),
         "tokens_completed": len(completed),
@@ -84,7 +93,9 @@ def aggregate(db: Session, tokens: list[Token]) -> dict:
         "tokens_cancelled": len(cancelled),
         "avg_wait_mins": round(sum(waits) / len(waits), 2) if waits else 0.0,
         "avg_consult_mins": round(sum(consults) / len(consults), 2) if consults else 0.0,
-        "total_revenue": _revenue(db, completed),
+        "total_revenue": rev["total"],
+        "consultation_revenue": rev["consultation"],
+        "booking_revenue": rev["booking"],
         "peak_hour": _peak_hour(tokens),
     }
 
@@ -202,3 +213,84 @@ def department(db: Session, hospital_id: int, department_id: int, year: int, mon
         setattr(row, k, out[k])
     row.generated_at = utcnow()
     return out
+
+
+_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+
+def clinic_overview(db: Session, hospital_id: int, year: int, month: int) -> dict:
+    """Everything the clinic Reports page shows, in one payload — aggregated over
+    ALL of the hospital's doctors for the given month: headline KPIs (collected
+    money = paid consultations + booking fees), visits per weekday, the visit
+    split by department, and the top doctors by completed consultations."""
+    start, end = month_bounds(year, month)
+    tokens = tokens_in(db, start, end, hospital_id=hospital_id)
+    agg = aggregate(db, tokens)
+
+    # Lookup maps for this hospital's doctors and departments.
+    doctors = {d.doctor_id: d for d in db.scalars(select(Doctor).where(Doctor.hospital_id == hospital_id)).all()}
+    dept_names = {dep.department_id: dep.name for dep in db.scalars(select(Department).where(Department.hospital_id == hospital_id)).all()}
+
+    # Visits per weekday (Mon..Sun).
+    week_counts = {d: 0 for d in _WEEK}
+    for t in tokens:
+        week_counts[_WEEK[t.token_date.weekday()]] += 1
+    visits_week = [{"day": d, "value": week_counts[d]} for d in _WEEK]
+
+    # Visit split by department (share of all tokens).
+    dept_counts: dict[str, int] = {}
+    for t in tokens:
+        doc = doctors.get(t.doctor_id)
+        label = dept_names.get(doc.department_id) if doc and doc.department_id else None
+        label = label or "General"
+        dept_counts[label] = dept_counts.get(label, 0) + 1
+    total = len(tokens) or 1
+    dept_split = sorted(
+        ({"label": k, "count": v, "value": round(v / total * 100)} for k, v in dept_counts.items()),
+        key=lambda x: x["count"], reverse=True,
+    )
+
+    # Top doctors by completed consultations, with average rating from feedback.
+    done_by_doc: dict[int, int] = {}
+    for t in tokens:
+        if t.status == "completed":
+            done_by_doc[t.doctor_id] = done_by_doc.get(t.doctor_id, 0) + 1
+    rating_rows = db.execute(
+        select(Appointment.doctor_id, Appointment.rating).where(
+            Appointment.hospital_id == hospital_id,
+            Appointment.appointment_date >= start, Appointment.appointment_date <= end,
+            Appointment.rating.is_not(None),
+        )
+    ).all()
+    rating_acc: dict[int, list] = {}
+    for did, r in rating_rows:
+        rating_acc.setdefault(did, []).append(r)
+    top_doctors = []
+    for did, consults in sorted(done_by_doc.items(), key=lambda x: x[1], reverse=True)[:5]:
+        d = doctors.get(did)
+        rs = rating_acc.get(did, [])
+        top_doctors.append({
+            "doctor_id": did,
+            "name": (d.name if d and d.name else "Doctor"),
+            "specialty": (d.specialization if d else ""),
+            "photo": (d.profile_photo_url if d else None),
+            "consults": consults,
+            "rating": round(sum(rs) / len(rs), 1) if rs else None,
+        })
+
+    unique_patients = len({t.patient_id for t in tokens if t.patient_id})
+    return {
+        "hospital_id": hospital_id, "month": month, "year": year,
+        "kpis": {
+            "total_patients": unique_patients,
+            "consultations": agg["tokens_completed"],
+            "total_tokens": agg["total_tokens"],
+            "revenue": agg["total_revenue"],
+            "consultation_revenue": agg["consultation_revenue"],
+            "booking_revenue": agg["booking_revenue"],
+            "no_shows": agg["tokens_missed"],
+        },
+        "visits_week": visits_week,
+        "dept_split": dept_split,
+        "top_doctors": top_doctors,
+    }
