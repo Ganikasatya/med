@@ -9,10 +9,12 @@ import {
   Phone,
   MapPin,
   Stethoscope,
-  Plus,
   ShieldCheck,
+  Ticket,
+  CalendarCheck,
+  ClipboardList,
+  Sparkles,
 } from 'lucide-react'
-import Logo from '../common/Logo.jsx'
 import { TextInput, PasswordInput, SelectInput, Checkbox, Banner } from '../common/FormControls.jsx'
 import { AUTH_ROLES, DUMMY, CITIES, SPECIALIZATIONS } from '../../data/authData.js'
 import { useAuth } from '../../context/AuthContext.jsx'
@@ -21,6 +23,28 @@ import PatientVoiceAuth from './PatientVoiceAuth.jsx'
 
 const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const mobileRe = /^\d{10}$/
+
+// Editorial promo content for the split panel (matches the reference designs).
+const PATIENT_PROMO = {
+  badge: 'For patients & families',
+  title: 'Your health journey starts here',
+  subtitle: 'Book doctors, get tokens, and avoid long waiting queues.',
+  features: [
+    { icon: ShieldCheck, title: 'Verified doctors', desc: 'Trusted & experienced doctors you can rely on.' },
+    { icon: Ticket, title: 'Instant token booking', desc: 'Get tokens in seconds and skip the long lines.' },
+    { icon: CalendarCheck, title: 'Family health records', desc: 'One place for everyone you care for.' },
+  ],
+}
+const DOCTOR_PROMO = {
+  badge: 'For clinicians',
+  title: 'Care for more patients, effortlessly',
+  subtitle: 'Manage appointments, tokens and patient history in one place.',
+  features: [
+    { icon: CalendarCheck, title: 'Smart appointments', desc: 'Organise your day and reduce no-shows.' },
+    { icon: Ticket, title: 'Live token queue', desc: 'Call patients in order, skip the chaos.' },
+    { icon: ClipboardList, title: 'Patient history', desc: 'Access visit history securely, anytime.' },
+  ],
+}
 
 /**
  * Premium split auth modal used for BOTH patient and doctor roles.
@@ -31,6 +55,7 @@ const mobileRe = /^\d{10}$/
  */
 function AuthModal({ open, onClose, role = 'patient', initialMode = 'login' }) {
   const cfg = AUTH_ROLES[role]
+  const promo = role === 'patient' ? PATIENT_PROMO : DOCTOR_PROMO
   const navigate = useNavigate()
   const { login, register, homeFor } = useAuth()
   const { t } = useI18n()
@@ -167,7 +192,7 @@ function AuthModal({ open, onClose, role = 'patient', initialMode = 'login' }) {
       onMouseDown={onClose}
     >
       <div
-        className="relative flex w-full max-w-[760px] overflow-hidden rounded-3xl bg-white shadow-2xl"
+        className="theme-patient relative flex max-h-[94vh] w-full max-w-[1120px] overflow-hidden rounded-3xl bg-white shadow-2xl"
         onMouseDown={(e) => e.stopPropagation()}
       >
         {/* Close */}
@@ -179,26 +204,22 @@ function AuthModal({ open, onClose, role = 'patient', initialMode = 'login' }) {
           <X className="h-5 w-5" />
         </button>
 
-        {/* Left promo panel */}
-        <div className="relative hidden w-[42%] flex-col justify-center overflow-hidden bg-gradient-to-br from-brand-blue via-brand-blue to-brand-green p-7 text-white md:flex">
-          {/* faint plus pattern */}
-          <Plus className="absolute right-6 top-10 h-8 w-8 text-white/15" />
-          <Plus className="absolute right-16 top-1/2 h-5 w-5 text-white/10" />
-          <Plus className="absolute bottom-10 left-8 h-6 w-6 text-white/10" />
-          <Logo className="[&_span]:text-white [&_path]:fill-white/90" />
-          <h3 className="mt-7 text-[26px] font-extrabold leading-tight">
-            {cfg.brand.title}
-          </h3>
-          <p className="mt-2 text-sm text-white/80">{cfg.brand.subtitle}</p>
-          <ul className="mt-6 space-y-4">
-            {cfg.brand.benefits.map(({ icon: Icon, title, desc }) => (
-              <li key={title} className="flex gap-3">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/15 ring-1 ring-white/25">
-                  <Icon className="h-[18px] w-[18px] text-white" />
+        {/* Left promo panel — brand teal→green (matches landing, patient & doctor) */}
+        <div className="relative hidden w-[46%] flex-col justify-center overflow-hidden bg-gradient-to-br from-[#0f766e] via-[#0d9488] to-[#16a34a] p-11 text-white md:flex">
+          <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-white/10 px-3.5 py-1.5 text-[13px] font-semibold text-green-100 ring-1 ring-white/15">
+            <Sparkles className="h-4 w-4" /> {promo.badge}
+          </span>
+          <h3 className="mt-8 font-serif text-[2.7rem] leading-[1.08] text-white">{promo.title}</h3>
+          <p className="mt-4 text-[15px] text-green-100/80">{promo.subtitle}</p>
+          <ul className="mt-10 space-y-6">
+            {promo.features.map(({ icon: Icon, title, desc }) => (
+              <li key={title} className="flex gap-4">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/10 ring-1 ring-white/15">
+                  <Icon className="h-6 w-6 text-white" />
                 </span>
                 <div>
-                  <p className="text-sm font-bold">{title}</p>
-                  <p className="text-xs leading-snug text-white/75">{desc}</p>
+                  <p className="text-base font-bold text-white">{title}</p>
+                  <p className="text-[13px] leading-snug text-green-100/70">{desc}</p>
                 </div>
               </li>
             ))}
@@ -206,13 +227,15 @@ function AuthModal({ open, onClose, role = 'patient', initialMode = 'login' }) {
         </div>
 
         {/* Right form panel */}
-        <div className="flex w-full flex-col p-7 md:w-[58%]">
-          <div className="mb-4 flex flex-col items-center text-center">
-            <Logo />
-            <h2 className="mt-3 text-2xl font-extrabold text-brand-navy">
+        <div className="flex w-full flex-col overflow-y-auto p-9 md:w-[58%] md:p-10">
+          <div className="mb-5 flex flex-col items-center text-center">
+            <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#d9f2e6] text-[#0f766e]">
+              {role === 'patient' ? <User className="h-8 w-8" /> : <Stethoscope className="h-8 w-8" />}
+            </span>
+            <h2 className="mt-4 font-serif text-4xl text-brand-navy">
               {role === 'patient' ? t('auth.title') : cfg[mode].title}
             </h2>
-            <p className="mt-1 max-w-xs text-[13px] text-slate-500">
+            <p className="mt-2 max-w-sm text-sm text-slate-500">
               {role === 'patient' ? t('auth.subtitle') : cfg[mode].subtitle}
             </p>
           </div>
@@ -342,33 +365,31 @@ function AuthModal({ open, onClose, role = 'patient', initialMode = 'login' }) {
             </div>
           )}
 
-          {/* SIGNUP */}
+          {/* SIGNUP → doctors register on a dedicated page (needs document uploads
+              + manual verification), so route out of the modal. */}
           {mode === 'signup' && (
-            <form onSubmit={handleSignup} className="space-y-3">
-              <TextInput icon={User} placeholder="Full Name" value={form.fullName || ''} onChange={set('fullName')} error={errors.fullName} />
-              <TextInput icon={Phone} prefix="+91" placeholder="Mobile Number" inputMode="numeric" maxLength={10} value={form.mobile || ''} onChange={set('mobile')} error={errors.mobile} />
-              <TextInput icon={Mail} placeholder="Email" value={form.email || ''} onChange={set('email')} error={errors.email} />
-              {role === 'patient' ? (
-                <SelectInput icon={MapPin} value={form.city || ''} onChange={set('city')} error={errors.city}>
-                  <option value="">Select City</option>
-                  {CITIES.map((c) => <option key={c}>{c}</option>)}
-                </SelectInput>
-              ) : (
-                <SelectInput icon={Stethoscope} value={form.specialization || ''} onChange={set('specialization')} error={errors.specialization}>
-                  <option value="">Select Specialization</option>
-                  {SPECIALIZATIONS.map((s) => <option key={s}>{s}</option>)}
-                </SelectInput>
-              )}
-              <PasswordInput icon={Lock} placeholder="Password" value={form.password || ''} onChange={set('password')} error={errors.password} />
-              <PasswordInput icon={Lock} placeholder="Confirm Password" value={form.confirm || ''} onChange={set('confirm')} error={errors.confirm} />
-              <Checkbox checked={!!form.terms} onChange={(e) => setForm((f) => ({ ...f, terms: e.target.checked }))}>
-                I agree to the <span className="font-semibold text-brand-blue">Terms &amp; Privacy Policy</span>
-              </Checkbox>
-              {errors.terms && <p className="-mt-1 text-xs text-red-500">{errors.terms}</p>}
-              <button className="w-full rounded-xl bg-brand-blue py-3 text-sm font-semibold text-white transition-colors hover:bg-brand-blueDark">
-                Create Account
+            <div className="space-y-4 py-2">
+              <div className="rounded-xl border border-brand-blueLight bg-brand-blueLight/40 p-4">
+                <p className="text-sm font-semibold text-brand-navy">Register your practice on TapCure</p>
+                <p className="mt-1 text-[13px] text-slate-500">
+                  Doctor sign-up needs your medical registration certificate and degree for
+                  manual verification. We'll take you to the full registration form.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { onClose(); navigate('/doctor-signup') }}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-blue py-3 text-sm font-semibold text-white transition-colors hover:bg-brand-blueDark"
+              >
+                <Stethoscope className="h-4 w-4" /> Continue to Doctor Registration
               </button>
-            </form>
+              <p className="text-center text-[13px] text-slate-500">
+                Already registered?{' '}
+                <button type="button" onClick={() => setMode('login')} className="font-semibold text-brand-blue hover:underline">
+                  Login
+                </button>
+              </p>
+            </div>
           )}
           </>
           )}

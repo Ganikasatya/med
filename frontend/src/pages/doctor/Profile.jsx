@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Building2, Stethoscope, Mail, Phone, MapPin, BadgeCheck, Award, Pencil, X, IndianRupee, Languages, Plus, Trash2 } from 'lucide-react'
+import { Building2, Stethoscope, Mail, Phone, MapPin, BadgeCheck, Award, Pencil, X, IndianRupee, Languages, Plus, Trash2, Fingerprint } from 'lucide-react'
 import { Card, PageHeading, ToolButton, Avatar } from '../../components/clinic/ui.jsx'
 import { TextInput, SelectInput, Banner } from '../../components/common/FormControls.jsx'
+import AddressAutocomplete from '../../components/common/AddressAutocomplete.jsx'
+import PhotoUpload from '../../components/common/PhotoUpload.jsx'
+import { fileUrl } from '../../api'
 import { useDoctorCtx } from '../../context/DoctorContext.jsx'
 import { doctorsApi } from '../../api'
 import { geocodeAddress } from '../../lib/geo.js'
@@ -22,6 +25,8 @@ function EditModal({ doctor, onClose, onSaved }) {
   const [form, setForm] = useState({
     specialization: doctor.specialization || '',
     qualification: doctor.qualification || '',
+    registration_number: doctor.registration_number || '',
+    hpr_id: doctor.hpr_id || '',
     experience_years: doctor.experience_years ?? '',
     consultation_fee: Number(doctor.consultation_fee) || '',
     languages: doctor.languages || '',
@@ -58,9 +63,18 @@ function EditModal({ doctor, onClose, onSaved }) {
           <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="h-5 w-5" /></button>
         </div>
         {error && <div className="mb-4"><Banner type="error">{error}</Banner></div>}
+        <div className="mb-5">
+          <PhotoUpload
+            url={doctor.profile_photo_url}
+            name={doctor.name}
+            onUpload={async (fd) => { const d = await doctorsApi.uploadPhoto(doctor.doctor_id, fd); onSaved(d); return d.profile_photo_url }}
+          />
+        </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <TextInput label="Specialization" value={form.specialization} onChange={set('specialization')} />
           <TextInput label="Qualification" value={form.qualification} onChange={set('qualification')} />
+          <TextInput label="Medical Registration No." value={form.registration_number} onChange={set('registration_number')} />
+          <TextInput label="HPR ID (optional)" value={form.hpr_id} onChange={set('hpr_id')} placeholder="ABDM Healthcare Professionals Registry ID" />
           <TextInput label="Experience (years)" type="number" value={form.experience_years} onChange={set('experience_years')} />
           <TextInput label="Consultation Fee (₹)" type="number" value={form.consultation_fee} onChange={set('consultation_fee')} />
           <div className="sm:col-span-2"><TextInput label="Languages" value={form.languages} onChange={set('languages')} placeholder="e.g. English, Hindi, Telugu" /></div>
@@ -95,6 +109,8 @@ function PracticeModal({ doctor, onClose, onSaved }) {
     name: 'Home clinic',
     address: '',
     city: '',
+    latitude: null,
+    longitude: null,
     consultation_fee: Number(doctor.consultation_fee) || 0,
   })
   const [saving, setSaving] = useState(false)
@@ -117,11 +133,17 @@ function PracticeModal({ doctor, onClose, onSaved }) {
     try {
       let coords = null
       if (form.practice_type !== 'online') {
-        setLocating(true)
-        coords = await geocodeAddress({ address: form.address, city: form.city })
-        setLocating(false)
+        // Coordinates picked from the Google suggestion are the most accurate;
+        // only geocode the typed text when the user didn't pick a suggestion.
+        if (form.latitude != null && form.longitude != null) {
+          coords = { lat: Number(form.latitude), lng: Number(form.longitude) }
+        } else {
+          setLocating(true)
+          coords = await geocodeAddress({ address: form.address, city: form.city })
+          setLocating(false)
+        }
         if (!coords) {
-          setError('Could not locate this address. Please enter a more complete address with area and city.')
+          setError('Could not locate this address. Please pick it from the map suggestions, or enter a more complete address with area and city.')
           setSaving(false)
           return
         }
@@ -165,7 +187,22 @@ function PracticeModal({ doctor, onClose, onSaved }) {
           <TextInput label="City" value={form.city} onChange={set('city')} />
           <TextInput label="Consultation fee" type="number" min="0" value={form.consultation_fee} onChange={set('consultation_fee')} />
           <div className="sm:col-span-2">
-            <TextInput label="Address" value={form.address} onChange={set('address')} placeholder="Optional for online consultation" />
+            <label className="mb-1.5 block text-[13px] font-semibold text-slate-700">Address</label>
+            <AddressAutocomplete
+              value={form.address}
+              onChange={(val) => setForm((f) => ({ ...f, address: val, latitude: null, longitude: null }))}
+              onSelect={(p) => setForm((f) => ({
+                ...f,
+                address: p.label || f.address,
+                city: p.city || f.city,
+                latitude: p.lat ?? null,
+                longitude: p.lng ?? null,
+              }))}
+              biasLat={Number(form.latitude) || undefined}
+              biasLng={Number(form.longitude) || undefined}
+              placeholder={form.practice_type === 'online' ? 'Optional for online consultation' : 'Search this practice on Google Maps…'}
+              className="flex w-full items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 pr-9 text-sm text-brand-navy outline-none transition-colors focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/10"
+            />
           </div>
         </div>
         <div className="mt-6 flex justify-end gap-3">
@@ -215,7 +252,11 @@ function Profile() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[340px_1fr]">
         <Card className="flex flex-col items-center text-center">
-          <Avatar name={doctor.name} className="h-20 w-20 text-2xl" />
+          {doctor.profile_photo_url ? (
+            <img src={fileUrl(doctor.profile_photo_url)} alt={doctor.name} className="h-20 w-20 rounded-full object-cover ring-2 ring-slate-100" />
+          ) : (
+            <Avatar name={doctor.name} className="h-20 w-20 text-2xl" />
+          )}
           <h3 className="mt-3 text-xl font-extrabold text-brand-navy">{doctor.name}</h3>
           <p className="text-[13px] text-slate-500">{doctor.specialization}</p>
           {doctor.status === 'active' && <p className="mt-1 flex items-center gap-1 text-[13px] text-green-600"><BadgeCheck className="h-4 w-4" /> Active</p>}
@@ -236,6 +277,7 @@ function Profile() {
             <Row icon={Stethoscope} label="Specialty" value={doctor.specialization} />
             <Row icon={Award} label="Qualification" value={doctor.qualification} />
             <Row icon={BadgeCheck} label="Registration No." value={doctor.registration_number} />
+            <Row icon={Fingerprint} label="HPR ID (ABDM)" value={doctor.hpr_id} />
             <Row icon={Award} label="Experience" value={doctor.experience_years != null ? `${doctor.experience_years} years` : ''} />
             <Row icon={IndianRupee} label="Consultation Fee" value={`₹${Number(doctor.consultation_fee)}`} />
             <Row icon={Languages} label="Languages" value={doctor.languages} />

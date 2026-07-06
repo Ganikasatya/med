@@ -42,6 +42,13 @@ export const dashboardT = {
   'pdash.bookTitle': { en: 'Book Appointment', te: 'అపాయింట్‌మెంట్ బుక్ చేయండి', hi: 'अपॉइंटमेंट बुक करें' },
   'pdash.bookPromo': { en: 'Pick a doctor, choose a slot, and manage it from My Appointments.', te: 'డాక్టర్‌ను ఎంచుకుని, స్లాట్ ఎంచుకుని, నా అపాయింట్‌మెంట్ల నుండి నిర్వహించండి.', hi: 'डॉक्टर चुनें, स्लॉट चुनें, और इसे मेरी अपॉइंटमेंट से प्रबंधित करें।' },
   'pdash.bookNow': { en: 'Book Now', te: 'ఇప్పుడే బుక్ చేయండి', hi: 'अभी बुक करें' },
+  'pdash.bookSubtitle': { en: 'Book manually or use voice for faster booking.', te: 'మాన్యువల్‌గా బుక్ చేయండి లేదా వేగవంతమైన బుకింగ్ కోసం వాయిస్ ఉపయోగించండి.', hi: 'मैन्युअल रूप से बुक करें या तेज़ बुकिंग के लिए वॉइस का उपयोग करें।' },
+  'pdash.recommended': { en: 'Recommended', te: 'సిఫార్సు చేయబడింది', hi: 'अनुशंसित' },
+  'pdash.bookManually': { en: 'Book Manually', te: 'మాన్యువల్‌గా బుక్ చేయండి', hi: 'मैन्युअल रूप से बुक करें' },
+  'pdash.bookManuallySub': { en: 'Choose doctor, date & time yourself.', te: 'డాక్టర్, తేదీ & సమయాన్ని మీరే ఎంచుకోండి.', hi: 'डॉक्टर, तारीख और समय स्वयं चुनें।' },
+  'pdash.flagFastest': { en: 'Fastest', te: 'వేగవంతమైనది', hi: 'सबसे तेज़' },
+  'pdash.flagSecure': { en: 'Secure', te: 'సురక్షితం', hi: 'सुरक्षित' },
+  'pdash.flagSimple': { en: 'Simple', te: 'సులభం', hi: 'सरल' },
 
   // KPI labels
   'pdash.kpiUpcoming': { en: 'Upcoming Appointments', te: 'రాబోయే అపాయింట్‌మెంట్లు', hi: 'आगामी अपॉइंटमेंट' },
@@ -73,6 +80,7 @@ export const dashboardT = {
   'pdash.estWait': { en: 'Est. wait time', te: 'అంచనా వేచి ఉండే సమయం', hi: 'अनुमानित प्रतीक्षा समय' },
   'pdash.leaveHomeBy': { en: 'Leave home by', te: 'ఇంటి నుండి బయలుదేరాల్సిన సమయం', hi: 'घर से निकलने का समय' },
   'pdash.leaveNow': { en: 'Now', te: 'ఇప్పుడే', hi: 'अभी' },
+  'pdash.travelTime': { en: 'Travel time', te: 'ప్రయాణ సమయం', hi: 'यात्रा समय' },
   'pdash.viewOpQueue': { en: 'View OP Queue', te: 'OP క్యూ చూడండి', hi: 'OP कतार देखें' },
   'pdash.notifyMe': { en: 'Notify Me', te: 'నాకు తెలియజేయండి', hi: 'मुझे सूचित करें' },
   'pdash.remindersOn': { en: 'Reminders on', te: 'రిమైండర్లు ఆన్', hi: 'रिमाइंडर चालू' },
@@ -106,8 +114,8 @@ export const dashboardT = {
   'pdash.trustCareD': { en: 'Access your health records anytime, anywhere.', te: 'మీ ఆరోగ్య రికార్డులను ఎప్పుడైనా, ఎక్కడైనా యాక్సెస్ చేయండి.', hi: 'अपने स्वास्थ्य रिकॉर्ड कभी भी, कहीं भी एक्सेस करें।' },
 
   // Footer
-  'pdash.footerConsole': { en: 'Doctor Mitra · Patient Console · Version 1.0.0', te: 'Doctor Mitra · రోగి కన్సోల్ · వెర్షన్ 1.0.0', hi: 'Doctor Mitra · मरीज़ कंसोल · संस्करण 1.0.0' },
-  'pdash.footerRights': { en: '© 2025 Doctor Mitra. All rights reserved.', te: '© 2025 Doctor Mitra. అన్ని హక్కులు రిజర్వ్‌డ్.', hi: '© 2025 Doctor Mitra. सर्वाधिकार सुरक्षित।' },
+  'pdash.footerConsole': { en: 'TapCure · Patient Console · Version 1.0.0', te: 'TapCure · రోగి కన్సోల్ · వెర్షన్ 1.0.0', hi: 'TapCure · मरीज़ कंसोल · संस्करण 1.0.0' },
+  'pdash.footerRights': { en: '© 2025 TapCure. All rights reserved.', te: '© 2025 TapCure. అన్ని హక్కులు రిజర్వ్‌డ్.', hi: '© 2025 TapCure. सर्वाधिकार सुरक्षित।' },
 
   // ---------- Appointments page ----------
   'ppage.apptsTitle': { en: 'My Appointments', te: 'నా అపాయింట్‌మెంట్లు', hi: 'मेरी अपॉइंटमेंट' },
@@ -170,6 +178,17 @@ export const dashboardT = {
   'ppage.backToDashboard': { en: 'Back to Dashboard', te: 'డ్యాష్‌బోర్డ్‌కు తిరిగి', hi: 'डैशबोर्ड पर वापस' },
   'ppage.apptDetails': { en: 'Appointment Details', te: 'అపాయింట్‌మెంట్ వివరాలు', hi: 'अपॉइंटमेंट विवरण' },
   'ppage.patientName': { en: 'Patient Name', te: 'రోగి పేరు', hi: 'मरीज़ का नाम' },
+  'ppage.bookingFor': { en: 'Booking for', te: 'ఎవరి కోసం', hi: 'किसके लिए' },
+  'ppage.myself': { en: 'Myself', te: 'నేనే', hi: 'स्वयं' },
+  'ppage.familyTitle': { en: 'Family Members', te: 'కుటుంబ సభ్యులు', hi: 'परिवार के सदस्य' },
+  'ppage.familySubtitle': { en: 'Add up to 5 dependents you can book appointments for.', te: 'మీరు అపాయింట్‌మెంట్‌లు బుక్ చేయగల 5 మంది వరకు చేర్చండి.', hi: 'जिनके लिए आप अपॉइंटमेंट बुक कर सकते हैं, ऐसे 5 तक सदस्य जोड़ें।' },
+  'ppage.addMember': { en: 'Add member', te: 'సభ్యుడిని చేర్చండి', hi: 'सदस्य जोड़ें' },
+  'ppage.relation': { en: 'Relation', te: 'సంబంధం', hi: 'संबंध' },
+  'ppage.noFamily': { en: 'No family members added yet.', te: 'ఇంకా కుటుంబ సభ్యులు చేర్చబడలేదు.', hi: 'अभी तक कोई परिवार सदस्य नहीं जोड़ा गया।' },
+  'ppage.familyMax': { en: 'You can add up to 5 members.', te: 'మీరు 5 మంది వరకు చేర్చవచ్చు.', hi: 'आप अधिकतम 5 सदस्य जोड़ सकते हैं।' },
+  'pdash.qaFamily': { en: 'My Family', te: 'నా కుటుంబం', hi: 'मेरा परिवार' },
+  'ppage.addFamilyMember': { en: '➕ Add family member…', te: '➕ కుటుంబ సభ్యుడిని చేర్చండి…', hi: '➕ परिवार सदस्य जोड़ें…' },
+  'ppage.addFamily': { en: 'Add family member', te: 'కుటుంబ సభ్యుడిని చేర్చండి', hi: 'परिवार सदस्य जोड़ें' },
   'ppage.mobileNumber': { en: 'Mobile Number', te: 'మొబైల్ నంబర్', hi: 'मोबाइल नंबर' },
   'ppage.email': { en: 'Email', te: 'ఇమెయిల్', hi: 'ईमेल' },
   'ppage.visitType': { en: 'Visit Type', te: 'సందర్శన రకం', hi: 'विज़िट प्रकार' },
@@ -315,6 +334,12 @@ export const dashboardT = {
   'ppage.gender': { en: 'Gender', te: 'లింగం', hi: 'लिंग' },
   'ppage.bloodGroup': { en: 'Blood Group', te: 'రక్త వర్గం', hi: 'रक्त समूह' },
   'ppage.preferredLanguage': { en: 'Preferred Language', te: 'ప్రాధాన్య భాష', hi: 'पसंदीदा भाषा' },
+  'ppage.abhaNumber': { en: 'ABHA Number', te: 'ABHA నంబర్', hi: 'ABHA नंबर' },
+  'ppage.abhaAddress': { en: 'ABHA Address', te: 'ABHA చిరునామా', hi: 'ABHA पता' },
+  'ppage.abhaSection': { en: 'ABHA Health ID', te: 'ABHA ఆరోగ్య ID', hi: 'ABHA हेल्थ ID' },
+  'ppage.abhaOptional': { en: 'Optional', te: 'ఐచ్ఛికం', hi: 'वैकल्पिक' },
+  'ppage.abhaNumberHint': { en: '14-digit ABHA number (e.g. 12-3456-7890-1234)', te: '14 అంకెల ABHA నంబర్ (ఉదా. 12-3456-7890-1234)', hi: '14 अंकों का ABHA नंबर (उदा. 12-3456-7890-1234)' },
+  'ppage.abhaAddressHint': { en: 'ABHA address (e.g. name@abdm)', te: 'ABHA చిరునామా (ఉదా. name@abdm)', hi: 'ABHA पता (उदा. name@abdm)' },
   'ppage.address': { en: 'Address', te: 'చిరునామా', hi: 'पता' },
   'ppage.emergencyContact': { en: 'Emergency Contact', te: 'అత్యవసర సంప్రదింపు', hi: 'आपातकालीन संपर्क' },
   'ppage.name': { en: 'Name', te: 'పేరు', hi: 'नाम' },
@@ -366,6 +391,10 @@ export const dashboardT = {
   'vbook.cardTitle': { en: 'Book an appointment by voice', te: 'వాయిస్‌తో అపాయింట్‌మెంట్ బుక్ చేయండి', hi: 'आवाज़ से अपॉइंटमेंट बुक करें' },
   'vbook.cardSub': { en: "Don't know how to use the app? Just talk — in your language.", te: 'యాప్ ఎలా వాడాలో తెలియదా? మీ భాషలో మాట్లాడండి చాలు.', hi: 'ऐप चलाना नहीं आता? बस अपनी भाषा में बोलिए।' },
   'vbook.start': { en: 'Start', te: 'ప్రారంభించండి', hi: 'शुरू करें' },
+  // Dashboard promo card (shown to Telugu patients)
+  'vbook.promoSub': { en: 'Click here and speak to book your appointment.', te: 'ఇక్కడ నొక్కి మాట్లాడి మీ అపాయింట్‌మెంట్ బుక్ చేయండి.', hi: 'यहां दबाएं और बोलकर अपना अपॉइंटमेंट बुक करें।' },
+  'vbook.promoCta': { en: 'Start Voice Booking', te: 'వాయిస్ బుకింగ్ ప్రారంభించండి', hi: 'वॉइस बुकिंग शुरू करें' },
+  'vbook.promoHint': { en: 'Tap here', te: 'ఇక్కడ నొక్కండి', hi: 'यहां दबाएं' },
   'vbook.chooseLang': { en: 'Choose your language', te: 'మీ భాషను ఎంచుకోండి', hi: 'अपनी भाषा चुनें' },
   'vbook.tapToSpeak': { en: 'Tap and speak', te: 'నొక్కి మాట్లాడండి', hi: 'दबाएं और बोलें' },
   'vbook.tapToStop': { en: 'Tap to stop', te: 'ఆపడానికి నొక్కండి', hi: 'रोकने के लिए दबाएं' },
@@ -382,9 +411,12 @@ export const dashboardT = {
   // Telugu voice usage instructions (shown when Telugu is selected)
   'vbook.guideTitle': { en: 'How to book by voice', te: 'వాయిస్‌తో ఎలా బుక్ చేయాలి', hi: 'आवाज़ से कैसे बुक करें' },
   'vbook.guideStep1': { en: 'Tap the big mic button and speak.', te: 'పెద్ద మైక్ బటన్ నొక్కి మాట్లాడండి.', hi: 'बड़े माइक बटन को दबाएं और बोलें।' },
-  'vbook.guideStep2': { en: 'Say your problem in Telugu — for example "jvaram" (fever) or "daggu" (cough).', te: 'మీ సమస్యను తెలుగులో చెప్పండి — ఉదాహరణకు "జ్వరం" లేదా "దగ్గు".', hi: 'अपनी समस्या तेलुगु में बोलें — जैसे "ज्वरम" या "दग्गु"।' },
+  'vbook.guideStep2': { en: 'Say your problem in your own words — for example "fever" or "cough".', te: 'మీ సమస్యను మీ మాటల్లో చెప్పండి — ఉదాహరణకు "జ్వరం" లేదా "దగ్గు".', hi: 'अपनी समस्या अपने शब्दों में बोलें — जैसे "बुखार" या "खांसी"।' },
   'vbook.guideStep3': { en: 'I will read out each step. Listen, then answer when the mic turns red.', te: 'నేను ప్రతి అడుగును చదివి వినిపిస్తాను. విని, మైక్ ఎరుపు అయ్యాక సమాధానం చెప్పండి.', hi: 'मैं हर कदम पढ़कर सुनाऊंगा। सुनें, फिर माइक लाल होने पर जवाब दें।' },
   'vbook.guideStep4': { en: 'If voice does not work, just tap the options shown below.', te: 'వాయిస్ పని చేయకపోతే, కింద కనిపించే ఎంపికలను నొక్కండి చాలు.', hi: 'अगर आवाज़ काम न करे, तो नीचे दिखे विकल्पों को टैप करें।' },
+  // Friendly spoken instructions (read aloud for Telugu users on the intro screen)
+  'vbook.guideSpoken': { en: 'Booking by voice is easy. Tap the big microphone button below and tell me your problem in your own words, like fever or cough. I will ask you one step at a time — just speak after the mic turns red. If voice does not work, you can also tap the options on the screen. To begin, tap the Start button below.', te: 'వాయిస్‌తో అపాయింట్‌మెంట్ బుక్ చేయడం చాలా సులభం. కింద ఉన్న పెద్ద మైక్రోఫోన్ బటన్‌ను నొక్కి, మీ సమస్యను మీ మాటల్లో చెప్పండి — ఉదాహరణకు జ్వరం లేదా దగ్గు. నేను ఒక్కో అడుగు చొప్పున మిమ్మల్ని అడుగుతాను; మైక్ ఎరుపు రంగులోకి మారిన తర్వాత మాట్లాడండి. వాయిస్ పని చేయకపోతే, తెరపై కనిపించే ఎంపికలను నొక్కి కూడా ఎంచుకోవచ్చు. ప్రారంభించడానికి కింద ఉన్న ప్రారంభించండి బటన్‌ను నొక్కండి.', hi: 'आवाज़ से बुकिंग आसान है। नीचे बड़े माइक्रोफ़ोन बटन को दबाएं और अपनी समस्या अपने शब्दों में बताएं, जैसे बुखार या खांसी। मैं एक-एक कदम पूछूंगा — माइक लाल होने पर बोलें। अगर आवाज़ काम न करे, तो स्क्रीन पर दिखे विकल्प भी दबा सकते हैं। शुरू करने के लिए नीचे शुरू करें बटन दबाएं।' },
+  'vbook.listenGuide': { en: 'Listen to instructions', te: 'సూచనలు వినండి', hi: 'निर्देश सुनें' },
 
   // Step prompts (spoken aloud + shown)
   'vbook.askSymptom': { en: 'Hello! Tell me, what is the problem? For example: fever, cough, or stomach pain.', te: 'నమస్తే! చెప్పండి, సమస్య ఏమిటి? ఉదాహరణకు: జ్వరం, దగ్గు, లేదా కడుపు నొప్పి.', hi: 'नमस्ते! बताइए, क्या तकलीफ़ है? जैसे: बुखार, खांसी, या पेट दर्द।' },
@@ -399,6 +431,7 @@ export const dashboardT = {
   'vbook.askDate': { en: 'Which day? You can say today or tomorrow.', te: 'ఏ రోజు? ఈరోజు లేదా రేపు అని చెప్పవచ్చు.', hi: 'किस दिन? आप आज या कल कह सकते हैं।' },
   'vbook.askSlot': { en: 'These times are open. Which time suits you?', te: 'ఈ సమయాలు అందుబాటులో ఉన్నాయి. ఏ సమయం మీకు అనుకూలం?', hi: 'ये समय उपलब्ध हैं। कौन सा समय ठीक रहेगा?' },
   'vbook.confirm': { en: 'Shall I book {doctor} on {date} at {time}? Say yes to confirm.', te: '{date} న {time} కి {doctor} వద్ద బుక్ చేయనా? అవును అని చెప్పండి.', hi: 'क्या मैं {doctor} को {date} को {time} बजे बुक कर दूं? हाँ कहें।' },
+  'vbook.confirmRetry': { en: 'Please say "yes" to book the appointment, or "no" to change it.', te: 'అపాయింట్‌మెంట్ బుక్ చేయడానికి "అవును" అనండి, మార్చడానికి "కాదు" అనండి.', hi: 'अपॉइंटमेंट बुक करने के लिए "हां" कहें, या बदलने के लिए "नहीं" कहें।' },
   'vbook.booking': { en: 'Booking your appointment…', te: 'మీ అపాయింట్‌మెంట్ బుక్ చేస్తోంది…', hi: 'आपका अपॉइंटमेंट बुक हो रहा है…' },
   'vbook.noDoctors': { en: 'Sorry, I could not find a doctor for that. Let us try again.', te: 'క్షమించండి, దానికి డాక్టర్ దొరకలేదు. మళ్లీ ప్రయత్నిద్దాం.', hi: 'माफ़ कीजिए, उसके लिए डॉक्टर नहीं मिला। फिर कोशिश करते हैं।' },
   'vbook.noSlots': { en: 'No times are open that day. Please pick another day.', te: 'ఆ రోజు సమయాలు లేవు. దయచేసి మరో రోజు ఎంచుకోండి.', hi: 'उस दिन कोई समय खाली नहीं है। कृपया दूसरा दिन चुनें।' },

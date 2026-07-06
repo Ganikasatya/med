@@ -28,6 +28,9 @@ class Hospital(Base):
     email: Mapped[str] = mapped_column(String(100), default="")
     logo_url: Mapped[Optional[str]] = mapped_column(String(255))
     gstin: Mapped[Optional[str]] = mapped_column(String(20))
+    # HFR ID — Health Facility Registry ID (ABDM). Optional now; the clinic's
+    # national facility identifier. Free-form (formats vary across facility types).
+    hfr_id: Mapped[Optional[str]] = mapped_column(String(64), index=True)
     # Geo-location of the clinic — the destination for the patient travel-time /
     # leave-by calculation (services/token_engine.py). Null until the clinic sets it.
     latitude: Mapped[Optional[float]] = mapped_column(Numeric(9, 6))

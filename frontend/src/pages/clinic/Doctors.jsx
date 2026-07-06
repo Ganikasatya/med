@@ -21,7 +21,7 @@ function Info({ icon: Icon, label, value }) {
 function AddDoctorModal({ departments, onClose, onAdded }) {
   const [form, setForm] = useState({
     name: '', specialization: 'General Physician', consultation_fee: '', experience_years: '',
-    department_id: '', languages: '', create_login: false, email: '', password: '',
+    department_id: '', languages: '', hpr_id: '', create_login: false, email: '', password: '',
   })
   const [errors, setErrors] = useState({})
   const [busy, setBusy] = useState(false)
@@ -49,6 +49,7 @@ function AddDoctorModal({ departments, onClose, onAdded }) {
         experience_years: form.experience_years ? Number(form.experience_years) : 0,
         department_id: form.department_id ? Number(form.department_id) : undefined,
         languages: form.languages,
+        hpr_id: form.hpr_id?.trim() || undefined,
         create_login: form.create_login,
         email: form.create_login ? form.email : undefined,
         password: form.create_login ? form.password : undefined,
@@ -81,6 +82,7 @@ function AddDoctorModal({ departments, onClose, onAdded }) {
             <TextInput icon={Briefcase} placeholder="Experience (yrs)" inputMode="numeric" value={form.experience_years} onChange={set('experience_years')} />
           </div>
           <TextInput placeholder="Languages (e.g. Hindi, Telugu)" value={form.languages} onChange={set('languages')} />
+          <TextInput placeholder="HPR ID — Healthcare Professionals Registry (optional)" value={form.hpr_id} onChange={set('hpr_id')} />
 
           <label className="flex items-center gap-2 pt-1 text-[13px] font-medium text-slate-600">
             <input type="checkbox" checked={form.create_login} onChange={(e) => setForm((f) => ({ ...f, create_login: e.target.checked }))} className="h-4 w-4 rounded border-slate-300 text-brand-blue" />

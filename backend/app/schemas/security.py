@@ -2,7 +2,9 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+
+from .patient import _normalize_abha_number
 
 
 # ---- Tokens ----
@@ -30,6 +32,9 @@ class RegisterRequest(BaseModel):
     password: str = Field(..., min_length=6, max_length=128)
     hospital_id: Optional[int] = None
     city: Optional[str] = None
+    abha_number: Optional[str] = None  # optional ABHA health ID (14 digits)
+
+    _norm_abha = field_validator("abha_number")(_normalize_abha_number)
 
 
 class ChangePasswordRequest(BaseModel):
@@ -66,6 +71,9 @@ class OtpRegister(BaseModel):
     otp: str = Field(..., min_length=4, max_length=8)
     name: str = Field(..., min_length=1, max_length=100)
     city: Optional[str] = None
+    abha_number: Optional[str] = None  # optional ABHA health ID (14 digits)
+
+    _norm_abha = field_validator("abha_number")(_normalize_abha_number)
 
 
 # ---- Users ----

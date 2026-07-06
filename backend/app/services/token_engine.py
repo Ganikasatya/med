@@ -26,10 +26,12 @@ from sqlalchemy.orm import Session
 
 from ..database import utcnow
 from ..models import (
-    Doctor, DoctorAffiliation, DoctorDelayLog, Hospital, Token,
-    TokenMovementLog, TokenRecallHistory, TokenStatusHistory,
+    Appointment, ApptStatusHistory, Doctor, DoctorAffiliation, DoctorDelayLog,
+    Hospital, Token, TokenMovementLog, TokenRecallHistory, TokenStatusHistory,
 )
+from . import google_maps
 from . import notifications as notify
+from . import routing
 
 PRIORITY_RANK = {"emergency": 0, "urgent": 1, "normal": 2}
 _DEFAULT_CONSULT = 10
@@ -117,6 +119,17 @@ def travel_minutes_for(db: Session, token: Token) -> Optional[int]:
     if dest_lat is None or dest_lng is None:
         return None
 
+    # Prefer real road driving time, tried in order of accuracy:
+    #   Google Distance Matrix (live traffic) → OpenRouteService → haversine.
+    # Each provider fails open (returns None) when unconfigured/unreachable.
+    o_lat, o_lng = float(token.origin_lat), float(token.origin_lng)
+    d_lat, d_lng = float(dest_lat), float(dest_lng)
+    road = (
+        google_maps.driving_minutes(o_lat, o_lng, d_lat, d_lng)
+        or routing.driving_minutes(o_lat, o_lng, d_lat, d_lng)
+    )
+    if road is not None:
+        return road
     km = haversine_km(
         float(token.origin_lat), float(token.origin_lng),
         float(dest_lat), float(dest_lng),
@@ -282,12 +295,20 @@ def maybe_send_leave_alert(db: Session, token: Token) -> bool:
 
 
 # ---- audit writes -----------------------------------------------------------
+# A token reaching a terminal state drags its appointment to the matching one,
+# so patient-facing views (which read appointment.status) stay in sync.
+_TOKEN_TO_APPT_STATUS = {"completed": "completed", "cancelled": "cancelled", "missed": "no_show"}
+
+
 def set_status(db: Session, token: Token, new_status: str, by: Optional[int], reason: str = "") -> None:
     db.add(TokenStatusHistory(
         token_id=token.token_id, old_status=token.status, new_status=new_status,
         changed_by=by, reason=reason,
     ))
     token.status = new_status
+    appt_status = _TOKEN_TO_APPT_STATUS.get(new_status)
+    if appt_status:
+        sync_appointment_status(db, token, appt_status, by, reason)
 
 
 def log_movement(db: Session, token: Token, action: str, frm: Optional[int],
@@ -334,6 +355,22 @@ def start_serving(db: Session, token: Token, by: Optional[int]) -> None:
     if doctor and doctor.presence:
         doctor.presence.current_token_id = token.token_id
         doctor.presence.status = "busy"
+
+
+def sync_appointment_status(db: Session, token: Token, new_status: str, by: Optional[int], reason: str = "") -> None:
+    """Mirror a token's terminal state onto its appointment, so patient-facing
+    views (which read appointment.status) stay in sync with the queue. Skips if
+    the appointment is already in a terminal state."""
+    if not token.appointment_id:
+        return
+    appt = db.get(Appointment, token.appointment_id)
+    if not appt or appt.status in ("completed", "cancelled"):
+        return
+    db.add(ApptStatusHistory(
+        appointment_id=appt.appointment_id, old_status=appt.status,
+        new_status=new_status, changed_by=by, reason=reason,
+    ))
+    appt.status = new_status
 
 
 def finish_serving(db: Session, token: Token, by: Optional[int]) -> None:

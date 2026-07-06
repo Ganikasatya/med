@@ -6,25 +6,27 @@ holidays, delay logs, leave workflow, live presence status). All tenant-scoped.
 """
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from ..database import get_db
-from ..deps import ensure_same_tenant, require_permission
+from ..database import get_db, utcnow
+from ..deps import ensure_same_tenant, require_permission, require_role
 from ..models import (
-    Department, Doctor, DoctorAffiliation, DoctorBreak, DoctorDelayLog, DoctorHoliday,
-    DoctorLeaveRequest, DoctorSchedule, DoctorStatus, Hospital, Role, User,
+    Department, Doctor, DoctorAffiliation, DoctorBreak, DoctorDelayLog, DoctorDocument,
+    DoctorHoliday, DoctorLeaveRequest, DoctorSchedule, DoctorStatus, Hospital, Role, User,
 )
 from ..rbac import ROLE_DOCTOR, ROLE_PATIENT, ROLE_SUPER_ADMIN, is_clinic_staff
 from ..schemas.doctor import (
     AffiliationCreate, AffiliationOut, AffiliationUpdate, BreakCreate, BreakOut,
     DelayCreate, DelayOut, DoctorCreate, DoctorDetail, DoctorOnboard, DoctorOut,
-    DoctorUpdate, HolidayCreate, HolidayOut,
+    DoctorUpdate, DoctorVerificationOut, HolidayCreate, HolidayOut,
     LeaveCreate, LeaveDecision, LeaveOut, PresenceOut, PresenceUpdate,
     ScheduleCreate, ScheduleOut, ScheduleUpdate,
 )
+from ..schemas.hospital import RejectRequest
 from ..security import hash_password
+from ..services import storage
 from ..services import audit
 from ..services import notifications as notify
 from ..services import token_engine as te
@@ -116,6 +118,27 @@ def list_doctors(
     return db.scalars(stmt).all()
 
 
+# ---- Solo-doctor credential verification (Super Admin) ----
+# NOTE: this static path must be registered BEFORE "/doctors/{doctor_id}" so
+# "pending" isn't captured as a doctor_id.
+def _verification_out(db: Session, d: Doctor) -> DoctorVerificationOut:
+    """DoctorOut + contact + uploaded documents, for the admin review screen."""
+    out = DoctorVerificationOut.model_validate(d)
+    u = db.get(User, d.user_id) if d.user_id else None
+    out.email = u.email if u else None
+    out.phone = u.phone if u else None
+    return out
+
+
+@router.get("/doctors/pending", response_model=list[DoctorVerificationOut])
+def pending_doctors(me: User = Depends(require_role(ROLE_SUPER_ADMIN)), db: Session = Depends(get_db)):
+    """Self-registered doctors awaiting manual credential verification."""
+    rows = db.scalars(
+        select(Doctor).where(Doctor.verification_status == "pending").order_by(Doctor.doctor_id)
+    ).all()
+    return [_verification_out(db, d) for d in rows]
+
+
 @router.get("/doctors/{doctor_id}", response_model=DoctorDetail)
 def get_doctor(doctor_id: int, me: User = Depends(require_permission("doctor", "read")), db: Session = Depends(get_db)):
     d = _doctor(db, doctor_id)
@@ -170,6 +193,7 @@ def onboard_doctor(body: DoctorOnboard, me: User = Depends(require_permission("d
     doc = Doctor(
         name=body.name, user_id=user_id, hospital_id=hospital_id, department_id=body.department_id,
         specialization=body.specialization, qualification=body.qualification,
+        registration_number=body.registration_number, hpr_id=body.hpr_id,
         experience_years=body.experience_years, consultation_fee=body.consultation_fee,
         languages=body.languages, status="active",
     )
@@ -193,6 +217,70 @@ def update_doctor(doctor_id: int, body: DoctorUpdate, me: User = Depends(require
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Consultation fee is set by the clinic")
     for k, v in fields.items():
         setattr(d, k, v)
+    db.commit()
+    db.refresh(d)
+    return d
+
+
+@router.post("/doctors/{doctor_id}/photo", response_model=DoctorOut)
+def upload_doctor_photo(doctor_id: int, file: UploadFile = File(...), me: User = Depends(require_permission("doctor", "update")), db: Session = Depends(get_db)):
+    """Set/replace a doctor's profile photo."""
+    d = _doctor(db, doctor_id)
+    ensure_same_tenant(me, d.hospital_id)
+    storage.require_image(file)
+    url, _ = storage.save_upload("doctors", doctor_id, file)
+    d.profile_photo_url = url
+    db.commit()
+    db.refresh(d)
+    return d
+
+
+@router.post("/doctors/{doctor_id}/verify", response_model=DoctorOut)
+def verify_doctor(doctor_id: int, me: User = Depends(require_role(ROLE_SUPER_ADMIN)), db: Session = Depends(get_db)):
+    """Approve a pending doctor: mark verified, activate their login, notify them."""
+    d = _doctor(db, doctor_id)
+    if d.verification_status == "verified":
+        raise HTTPException(status.HTTP_409_CONFLICT, "Doctor is already verified")
+    d.verification_status = "verified"
+    d.status = "active"
+    d.verified_at = utcnow()
+    d.verified_by = me.user_id
+    d.rejection_reason = None
+    if d.user_id:
+        u = db.get(User, d.user_id)
+        if u:
+            u.status = "active"
+            if u.email:
+                notify.send_email(
+                    db, u.email, "Your doctor account is verified",
+                    f"Congratulations Dr. {d.name} — your credentials have been verified. "
+                    "You can now log in to TapCure and set up your practice.",
+                    ntype="general", hospital_id=d.hospital_id,
+                )
+    audit.log_activity(db, me.user_id, "doctor.verify", "doctor", {"doctor_id": doctor_id})
+    db.commit()
+    db.refresh(d)
+    return d
+
+
+@router.post("/doctors/{doctor_id}/reject", response_model=DoctorOut)
+def reject_doctor(doctor_id: int, body: RejectRequest, me: User = Depends(require_role(ROLE_SUPER_ADMIN)), db: Session = Depends(get_db)):
+    """Reject a pending doctor with a reason; keeps their login disabled."""
+    d = _doctor(db, doctor_id)
+    d.verification_status = "rejected"
+    d.status = "inactive"
+    d.rejection_reason = body.reason
+    if d.user_id:
+        u = db.get(User, d.user_id)
+        if u:
+            u.status = "inactive"
+            if u.email:
+                notify.send_email(
+                    db, u.email, "Doctor registration update",
+                    f"Your registration was not approved. {body.reason}".strip(),
+                    ntype="general", hospital_id=d.hospital_id,
+                )
+    audit.log_activity(db, me.user_id, "doctor.reject", "doctor", {"doctor_id": doctor_id})
     db.commit()
     db.refresh(d)
     return d
@@ -433,7 +521,11 @@ def list_delays(doctor_id: int = Query(...), me: User = Depends(require_permissi
 
 
 @router.post("/doctor-delay", response_model=DelayOut, status_code=201)
-def log_delay(body: DelayCreate, me: User = Depends(require_permission("doctor", "update")), db: Session = Depends(get_db)):
+def log_delay(body: DelayCreate, me: User = Depends(require_permission("token", "manage")), db: Session = Depends(get_db)):
+    # Logging a delay is a queue operation (it reshuffles ETAs + notifies waiting
+    # patients), so it's gated on token.manage — held by the doctor, the hospital
+    # admin AND the receptionist, so the front desk can update it if the doctor
+    # forgets. ensure_same_tenant below still confines it to the doctor's clinic.
     d = _doctor(db, body.doctor_id)
     ensure_same_tenant(me, d.hospital_id)
     delay_date = body.delay_date or date.today()

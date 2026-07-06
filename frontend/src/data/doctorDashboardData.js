@@ -1,5 +1,5 @@
 /**
- * Static mock data for the Doctor Dashboard (Doctor Mitra).
+ * Static mock data for the Doctor Dashboard (TapCure).
  *
  *  ⚠️  Prototype data only — wire to the real backend later. The component
  *      keeps the live queue in local state so the action buttons (Call Next,

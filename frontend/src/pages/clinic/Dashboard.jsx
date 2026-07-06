@@ -1,42 +1,70 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  CalendarDays, Radio, ArrowRight, Plus, UserPlus, Stethoscope, Clock, BarChart3, ChevronRight,
-  Users, CheckCircle2,
+  CalendarDays, UserPlus, Stethoscope, ChevronRight,
+  Users, CheckCircle2, IndianRupee, UserX, Wallet, Footprints, Banknote, Smartphone, CreditCard,
 } from 'lucide-react'
-import { Card, StatCard, StatusBadge, PageHeading, ToolButton } from '../../components/clinic/ui.jsx'
-import { VISITS_WEEK } from '../../data/clinicPagesData.js'
+import { Card, StatCard, PageHeading, ToolButton, Avatar } from '../../components/clinic/ui.jsx'
 import { doctorsApi, tokensApi, appointmentsApi, reportsApi } from '../../api'
-import { prettyTime, statusLabel, todayISO } from '../../lib/format.js'
+import { todayISO } from '../../lib/format.js'
 
-const QUICK = [
-  { label: 'Book Appointment', to: '/clinic-dashboard/appointments', icon: Plus, tone: 'blue' },
-  { label: 'Add Walk-in', to: '/clinic-dashboard/walk-ins', icon: UserPlus, tone: 'green' },
-  { label: 'Manage Doctors', to: '/clinic-dashboard/doctors', icon: Stethoscope, tone: 'purple' },
-  { label: 'Set Availability', to: '/clinic-dashboard/availability', icon: Clock, tone: 'orange' },
-  { label: 'View Reports', to: '/clinic-dashboard/reports', icon: BarChart3, tone: 'teal' },
-]
-const QTONE = {
-  blue: 'bg-blue-100 text-brand-blue', green: 'bg-green-100 text-green-600',
-  purple: 'bg-purple-100 text-purple-600', orange: 'bg-orange-100 text-orange-500', teal: 'bg-teal-100 text-teal-600',
+const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`
+
+/** Big gradient highlight card for the metrics the admin cares about most. */
+function HeroCard({ icon: Icon, label, value, sub, gradient, live }) {
+  return (
+    <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${gradient} p-5 text-white shadow-lg`}>
+      <div className="pointer-events-none absolute -right-8 -top-8 h-28 w-28 rounded-full bg-white/10" />
+      <div className="pointer-events-none absolute -bottom-10 -left-6 h-24 w-24 rounded-full bg-white/5" />
+      <div className="relative flex items-center justify-between">
+        <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/20 backdrop-blur">
+          <Icon className="h-6 w-6" />
+        </span>
+        {live && (
+          <span className="flex items-center gap-1.5 rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-white" /> Live
+          </span>
+        )}
+      </div>
+      <div className="relative mt-4 text-[32px] font-extrabold leading-none">{value}</div>
+      <div className="relative mt-1.5 text-[13px] font-semibold text-white/90">{label}</div>
+      {sub && <div className="relative mt-1 text-[11.5px] text-white/75">{sub}</div>}
+    </div>
+  )
 }
 
-function MiniBars({ data }) {
-  const max = Math.max(...data.map((d) => d.value))
+/** Horizontal stacked proportion bar + legend (walk-in/online, collections, …).
+ *  Segments should be mutually exclusive so the bar reads as a whole. */
+function SplitBar({ title, icon: Icon, segments, note }) {
+  const total = segments.reduce((s, x) => s + x.value, 0)
   return (
-    <div className="flex h-full items-end gap-2 pt-2">
-      {data.map((d) => (
-        <div key={d.day} className="flex h-full flex-1 flex-col items-center justify-end gap-1">
-          <div className="w-full rounded-t-md bg-gradient-to-t from-brand-blue/50 to-brand-blue" style={{ height: `${(d.value / max) * 100}%` }} />
-          <span className="text-[10px] text-slate-400">{d.day}</span>
-        </div>
-      ))}
+    <div>
+      <div className="mb-2 flex items-center gap-2 text-[13px] font-bold text-brand-navy">
+        {Icon && <Icon className="h-4 w-4 text-slate-400" />}
+        {title}
+      </div>
+      <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
+        {segments.map((s) => (
+          s.value > 0 ? <div key={s.label} className={s.color} style={{ width: `${(s.value / (total || 1)) * 100}%` }} /> : null
+        ))}
+      </div>
+      <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1.5">
+        {segments.map((s) => (
+          <span key={s.label} className="flex items-center gap-1.5 text-[12px]">
+            <span className={`h-2 w-2 rounded-full ${s.color}`} />
+            <span className="text-slate-500">{s.label}</span>
+            <span className="font-bold text-brand-navy">{s.value}</span>
+          </span>
+        ))}
+      </div>
+      {note && <p className="mt-2 text-[11px] text-slate-400">{note}</p>}
     </div>
   )
 }
 
 function Dashboard() {
   const [kpis, setKpis] = useState(null)
+  const [byDoctor, setByDoctor] = useState([])
   const [queue, setQueue] = useState({ current: null, waiting: [] })
   const [appts, setAppts] = useState([])
   const [loading, setLoading] = useState(true)
@@ -50,6 +78,7 @@ function Dashboard() {
         appointmentsApi.list({ date: today }).catch(() => []),
       ])
       setKpis(dash?.kpis || null)
+      setByDoctor(dash?.by_doctor || [])
       setAppts(apptList || [])
 
       // Aggregate the live queue across every doctor in the clinic.
@@ -77,12 +106,38 @@ function Dashboard() {
     return () => clearInterval(id)
   }, [])
 
+  // Operational splits the admin watches — computed from today's appointments:
+  // where patients came from (walk-in vs online) and how money was collected.
+  const ops = useMemo(() => {
+    const list = (appts || []).filter((a) => a.managed_by_hospital !== false)
+    const isWalkin = (a) => a.source === 'walkin' || a.appointment_type === 'walkin'
+    const live = (a) => !['cancelled', 'no_show'].includes(a.status)
+    const clinicPaid = list.filter((a) => a.consultation_paid)
+    const onlinePaid = list.filter((a) => Number(a.booking_fee_paid) > 0)
+    const methods = { cash: 0, upi: 0, card: 0, other: 0 }
+    clinicPaid.forEach((a) => {
+      const m = (a.consultation_payment_method || 'other').toLowerCase()
+      methods[m in methods ? m : 'other'] += 1
+    })
+    return {
+      total: list.length,
+      walkin: list.filter(isWalkin).length,
+      online: list.filter((a) => !isWalkin(a)).length,
+      clinicPaid: clinicPaid.length,
+      onlinePaid: onlinePaid.length,
+      pending: list.filter((a) => !a.consultation_paid && live(a)).length,
+      clinicAmt: clinicPaid.reduce((s, a) => s + Number(a.consultation_fee || 0), 0),
+      onlineAmt: onlinePaid.reduce((s, a) => s + Number(a.booking_fee_paid || 0), 0),
+      methods,
+    }
+  }, [appts])
+
+  // Secondary KPIs — the supporting numbers, shown smaller below the hero row.
   const STATS = [
-    { value: loading ? '—' : String(queue.waiting.length), label: 'Waiting Now', icon: Users, tone: 'blue' },
-    { value: kpis ? String(kpis.completed_today ?? 0) : '—', label: 'Completed Today', icon: CheckCircle2, tone: 'green' },
-    { value: String(appts.length), label: "Today's Appointments", icon: CalendarDays, tone: 'purple' },
-    { value: kpis ? `${kpis.doctors_active ?? 0}/${kpis.doctors ?? 0}` : '—', label: 'Doctors Active', icon: Stethoscope, tone: 'orange' },
-    { value: kpis ? String(kpis.total_patients ?? 0) : '—', label: 'Total Patients', icon: UserPlus, tone: 'teal' },
+    { value: kpis ? String(kpis.no_shows_today ?? 0) : '—', label: 'No-shows Today', icon: UserX, tone: 'teal' },
+    { value: String(appts.length), label: "Today's Appointments", icon: CalendarDays, tone: 'green' },
+    { value: kpis ? `${kpis.doctors_active ?? 0}/${kpis.doctors ?? 0}` : '—', label: 'Doctors Active', icon: Stethoscope, tone: 'teal' },
+    { value: kpis ? String(kpis.total_patients ?? 0) : '—', label: 'Total Patients', icon: UserPlus, tone: 'green' },
   ]
 
   return (
@@ -91,96 +146,121 @@ function Dashboard() {
         <ToolButton icon={CalendarDays}>{new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</ToolButton>
       </PageHeading>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+      {/* Hero row — the three numbers an admin checks first. */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <HeroCard
+          icon={IndianRupee}
+          label="Collected Today"
+          value={kpis ? inr(kpis.revenue_today) : '—'}
+          sub={`${ops.clinicPaid} paid at clinic · ${inr(ops.onlineAmt)} booked online`}
+          gradient="from-teal-500 via-emerald-500 to-green-500"
+        />
+        <HeroCard
+          icon={Users}
+          label="Waiting Now"
+          value={loading ? '—' : String(queue.waiting.length)}
+          sub={queue.current ? `Now serving ${queue.current.display_code}` : 'No token in progress'}
+          gradient="from-teal-500 to-teal-700"
+          live
+        />
+        <HeroCard
+          icon={CheckCircle2}
+          label="OPs Completed"
+          value={kpis ? String(kpis.completed_today ?? 0) : '—'}
+          sub={kpis ? `of ${kpis.tokens_today ?? 0} tokens today` : ''}
+          gradient="from-emerald-500 to-green-600"
+        />
+      </div>
+
+      {/* Today's operations — walk-in vs online, and how money was collected. */}
+      <Card>
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          <SplitBar
+            title="Patient Source"
+            icon={Footprints}
+            segments={[
+              { label: 'Walk-in', value: ops.walkin, color: 'bg-teal-500' },
+              { label: 'Online', value: ops.online, color: 'bg-green-500' },
+            ]}
+          />
+          <SplitBar
+            title="Consultation Collections"
+            icon={Wallet}
+            segments={[
+              { label: 'Paid at clinic', value: ops.clinicPaid, color: 'bg-teal-500' },
+              { label: 'Pending', value: ops.pending, color: 'bg-slate-300' },
+            ]}
+            note={`${ops.onlinePaid} prepaid booking fee online (${inr(ops.onlineAmt)})`}
+          />
+          <div>
+            <div className="mb-2 flex items-center gap-2 text-[13px] font-bold text-brand-navy">
+              <Banknote className="h-4 w-4 text-slate-400" /> Payment Mode
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { key: 'cash', label: 'Cash', icon: Banknote, tone: 'bg-green-50 text-green-700' },
+                { key: 'upi', label: 'UPI', icon: Smartphone, tone: 'bg-teal-50 text-teal-700' },
+                { key: 'card', label: 'Card', icon: CreditCard, tone: 'bg-emerald-50 text-emerald-700' },
+                { key: 'other', label: 'Other', icon: Wallet, tone: 'bg-slate-100 text-slate-500' },
+              ].map(({ key, label, icon: MIcon, tone }) => (
+                <span key={key} className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-semibold ${tone}`}>
+                  <MIcon className="h-3.5 w-3.5" /> {label}
+                  <span className="font-extrabold">{ops.methods[key] || 0}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* Secondary KPIs — supporting numbers. */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {STATS.map((s) => <StatCard key={s.label} value={s.value} label={s.label} icon={s.icon} tone={s.tone} />)}
       </div>
 
-      <div className="grid flex-1 grid-cols-1 gap-4 xl:grid-cols-[1.2fr_1fr_1.3fr]">
-        {/* Queue snapshot */}
-        <Card className="flex flex-col">
+      {/* Per-doctor performance today */}
+      <Card className="flex flex-col">
           <div className="flex items-center justify-between">
-            <h3 className="text-[15px] font-bold text-brand-navy">Live Queue</h3>
-            <Link to="/clinic-dashboard/op-queue" className="flex items-center gap-1 text-[12px] font-semibold text-brand-blue">Open <ChevronRight className="h-3.5 w-3.5" /></Link>
+            <h3 className="text-[15px] font-bold text-brand-navy">Doctor Performance Today</h3>
+            <Link to="/clinic-dashboard/op-queue" className="flex items-center gap-1 text-[12px] font-semibold text-teal-600">Queue <ChevronRight className="h-3.5 w-3.5" /></Link>
           </div>
-          {queue.current ? (
-            <div className="mt-3 flex items-center gap-2">
-              <Radio className="h-6 w-6 text-green-500" />
-              <span className="text-[28px] font-extrabold leading-none text-green-600">{queue.current.display_code}</span>
-              <span className="ml-2 text-[13px] text-slate-500">{queue.current.patient_name || queue.current.doctorName}</span>
+          {byDoctor.length === 0 ? (
+            <p className="mt-3 text-[13px] text-slate-400">{loading ? 'Loading…' : 'No consultations recorded yet today.'}</p>
+          ) : (
+            <div className="mt-2 min-h-0 flex-1 overflow-y-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="text-[12px] font-semibold text-slate-400">
+                    <th className="pb-2 pr-4">Doctor</th>
+                    <th className="pb-2 pr-3 text-right">OPs Done</th>
+                    <th className="pb-2 pr-3 text-right">Waiting</th>
+                    <th className="pb-2 text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[13px]">
+                  {byDoctor.map((d) => (
+                    <tr key={d.doctor_id} className="border-t border-slate-50">
+                      <td className="py-2.5 pr-4">
+                        <div className="flex items-center gap-2.5">
+                          <Avatar name={d.name} className="h-8 w-8 shrink-0 text-[11px]" />
+                          <div className="min-w-0 flex-1">
+                            <span className="block truncate font-semibold text-brand-navy">{d.name}</span>
+                            <div className="mt-1 h-1.5 w-full max-w-[140px] overflow-hidden rounded-full bg-slate-100">
+                              <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-teal-500" style={{ width: `${d.total ? (d.completed / d.total) * 100 : 0}%` }} />
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-2.5 pr-3 text-right font-bold text-green-600">{d.completed}</td>
+                      <td className="py-2.5 pr-3 text-right text-teal-600">{d.waiting}</td>
+                      <td className="py-2.5 text-right font-semibold text-slate-500">{d.total}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          ) : (
-            <p className="mt-3 text-[13px] text-slate-400">No token in progress.</p>
-          )}
-          <p className="mt-3 text-[12px] font-semibold text-slate-400">Up next</p>
-          {queue.waiting.length === 0 ? (
-            <p className="mt-1 text-[13px] text-slate-400">{loading ? 'Loading…' : 'Queue is empty.'}</p>
-          ) : (
-            <ul className="mt-1 space-y-1.5">
-              {queue.waiting.slice(0, 4).map((r) => (
-                <li key={r.token_id} className="flex items-center justify-between gap-2 text-[13px]">
-                  <span className="font-semibold text-brand-navy">{r.display_code}</span>
-                  <span className="flex-1 truncate text-slate-500">{r.patient_name || '—'}</span>
-                  <span className="text-[11px] text-slate-400">#{r.queue_position}</span>
-                </li>
-              ))}
-            </ul>
           )}
         </Card>
-
-        {/* Quick actions */}
-        <Card className="flex flex-col">
-          <h3 className="mb-3 text-[15px] font-bold text-brand-navy">Quick Actions</h3>
-          <div className="flex flex-1 flex-col gap-2">
-            {QUICK.map(({ label, to, icon: Icon, tone }) => (
-              <Link key={label} to={to} className="flex items-center gap-3 rounded-xl border border-slate-100 px-3 py-2 transition-colors hover:border-brand-blue hover:bg-brand-blueLight/40">
-                <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${QTONE[tone]}`}><Icon className="h-4 w-4" /></span>
-                <span className="flex-1 text-[13px] font-semibold text-brand-navy">{label}</span>
-                <ArrowRight className="h-4 w-4 text-slate-300" />
-              </Link>
-            ))}
-          </div>
-        </Card>
-
-        {/* Week chart */}
-        <Card className="flex flex-col">
-          <div className="flex items-center justify-between">
-            <h3 className="text-[15px] font-bold text-brand-navy">Visits This Week</h3>
-            <span className="text-[12px] font-semibold text-slate-400">Last 7 days</span>
-          </div>
-          <div className="min-h-0 flex-1"><MiniBars data={VISITS_WEEK} /></div>
-        </Card>
-      </div>
-
-      {/* Recent appointments */}
-      <Card>
-        <div className="mb-2 flex items-center justify-between">
-          <h3 className="text-[15px] font-bold text-brand-navy">Today's Appointments</h3>
-          <Link to="/clinic-dashboard/appointments" className="text-[12px] font-semibold text-brand-blue hover:underline">View all</Link>
-        </div>
-        {appts.length === 0 ? (
-          <p className="py-3 text-[13px] text-slate-400">{loading ? 'Loading…' : 'No appointments today.'}</p>
-        ) : (
-          <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="text-[12px] font-semibold text-slate-400">
-                <th className="pb-2 pr-4">Appt ID</th><th className="pb-2 pr-4">Patient</th><th className="pb-2 pr-4">Time</th><th className="pb-2">Status</th>
-              </tr>
-            </thead>
-            <tbody className="text-[13px]">
-              {appts.slice(0, 5).map((a) => (
-                <tr key={a.appointment_id} className="border-t border-slate-50">
-                  <td className="whitespace-nowrap py-2 pr-4 font-semibold text-brand-navy">#{a.appointment_id}</td>
-                  <td className="whitespace-nowrap py-2 pr-4 text-slate-600">{a.patient_name || '—'}</td>
-                  <td className="whitespace-nowrap py-2 pr-4 text-slate-500">{a.slot_time ? prettyTime(a.slot_time) : '—'}</td>
-                  <td className="py-2"><StatusBadge status={statusLabel(a.status)} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          </div>
-        )}
-      </Card>
     </div>
   )
 }

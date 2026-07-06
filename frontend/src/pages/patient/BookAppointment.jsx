@@ -1,16 +1,33 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { AnimatePresence, motion, animate, useReducedMotion } from 'framer-motion'
+import confetti from 'canvas-confetti'
+import { DotLottieReact } from '@lottiefiles/dotlottie-react'
 import {
   CalendarDays, Clock, MapPin, Stethoscope, UserRound, Phone, Mail,
   IndianRupee, ArrowLeft, CheckCircle2, AlertTriangle, LocateFixed,
-  Navigation, Users, Route, User,
+  Navigation, Users, Route, User, Ticket, Hourglass,
 } from 'lucide-react'
 import { Card, PageHeading } from '../../components/clinic/ui.jsx'
 import { TextInput, SelectInput, Checkbox, Banner } from '../../components/common/FormControls.jsx'
+import AddressAutocomplete from '../../components/common/AddressAutocomplete.jsx'
+import ClinicMap from '../../components/common/ClinicMap.jsx'
 import { usePatientCtx } from '../../context/PatientContext.jsx'
-import { appointmentsApi, doctorsApi } from '../../api'
+import { appointmentsApi, doctorsApi, tokensApi, paymentsApi, patientsApi } from '../../api'
 import { prettyTime, todayISO } from '../../lib/format.js'
-import { travelMinutesBetween, travelMinutesFromKm, getCurrentPosition, geocodeAddress } from '../../lib/geo.js'
+
+// Inject the Razorpay Checkout script once; resolves true when it's ready.
+function loadRazorpay() {
+  return new Promise((resolve) => {
+    if (window.Razorpay) return resolve(true)
+    const s = document.createElement('script')
+    s.src = 'https://checkout.razorpay.com/v1/checkout.js'
+    s.onload = () => resolve(true)
+    s.onerror = () => resolve(false)
+    document.body.appendChild(s)
+  })
+}
+import { travelMinutesBetween, travelMinutesFromKm, roadTravelMinutes, getCurrentPosition, geocodeAddress } from '../../lib/geo.js'
 import { useI18n } from '../../i18n/index.jsx'
 
 const VISIT_TYPES = [
@@ -39,6 +56,179 @@ function readableDate(iso) {
   })
 }
 
+/* Animated count-up for the success stats. */
+function CountUp({ value, duration = 1 }) {
+  const [n, setN] = useState(0)
+  useEffect(() => {
+    const controls = animate(0, value || 0, { duration, ease: 'easeOut', onUpdate: (v) => setN(Math.round(v)) })
+    return () => controls.stop()
+  }, [value, duration])
+  return <>{n}</>
+}
+
+/* A celebratory confetti burst — one pop from the centre + two side cannons. */
+function fireConfetti() {
+  const colors = ['#22c55e', '#10b981', '#2563eb', '#f59e0b', '#ffffff']
+  confetti({ particleCount: 90, spread: 72, startVelocity: 45, origin: { x: 0.5, y: 0.42 }, colors, zIndex: 70 })
+  setTimeout(() => confetti({ particleCount: 55, angle: 60, spread: 70, origin: { x: 0, y: 0.7 }, colors, zIndex: 70 }), 160)
+  setTimeout(() => confetti({ particleCount: 55, angle: 120, spread: 70, origin: { x: 1, y: 0.7 }, colors, zIndex: 70 }), 160)
+}
+
+const _container = { hidden: {}, show: { transition: { staggerChildren: 0.1, delayChildren: 0.08 } } }
+const _item = { hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } } }
+
+/* Loader: "loading" by Mj chen, locally vendored from LottieFiles.
+   https://lottiefiles.com/free-animation/loading-fHKMl9U5Jk */
+/* Two-act booking reveal: the requested Lottie loader, then confirmation. */
+function BookedCard({ booked, doctorName, dateLabel, onView, onAnother }) {
+  const tk = booked.token
+  const leaveBy = tk?.leave_by ? new Date(tk.leave_by).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }) : null
+  const peopleAhead = tk ? Math.max(0, (tk.queue_position || 1) - 1) : 0
+  const reduceMotion = useReducedMotion()
+  const [revealed, setRevealed] = useState(false)
+
+  useEffect(() => {
+    const revealTimer = window.setTimeout(() => {
+      setRevealed(true)
+      if (!reduceMotion) {
+        fireConfetti()
+        navigator.vibrate?.([35, 35, 85])
+      }
+    }, reduceMotion ? 700 : 2200)
+    return () => window.clearTimeout(revealTimer)
+  }, [reduceMotion])
+
+  return (
+    <div className="mx-auto flex max-w-[540px] flex-col gap-5 py-6">
+      <motion.div initial={{ opacity: 0, scale: 0.92, y: 22 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ type: 'spring', stiffness: 210, damping: 22 }}>
+        <Card className={`min-h-[350px] overflow-hidden p-0 ${revealed ? 'border-0 shadow-[0_24px_70px_-22px_rgba(15,118,110,0.55)]' : '!border-transparent !bg-transparent !shadow-none'}`}>
+          <AnimatePresence mode="wait" initial={false}>
+            {!revealed ? (
+              <motion.div
+                key="lottie-loader"
+                className="relative flex min-h-[350px] flex-col items-center justify-center px-6 py-8 text-center text-brand-navy"
+                exit={{ opacity: 0, scale: 1.3, filter: 'blur(12px)' }}
+                transition={{ duration: 0.24, ease: 'easeIn' }}
+              >
+                <motion.p initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="relative mb-3 text-[10px] font-bold uppercase tracking-[0.32em] text-brand-blue">
+                  Securing your appointment
+                </motion.p>
+
+                <motion.div
+                  className="relative h-[190px] w-[190px] drop-shadow-[0_0_30px_rgba(34,211,238,0.35)]"
+                  initial={{ opacity: 0, scale: 0.72 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ type: 'spring', stiffness: 230, damping: 18 }}
+                >
+                  <DotLottieReact
+                    src="/booking-loader.lottie"
+                    autoplay
+                    loop
+                    speed={0.9}
+                    className="h-full w-full"
+                  />
+                </motion.div>
+
+                <div className="relative mt-3 flex items-center gap-2 text-[13px] font-semibold text-slate-500">
+                  <span>Allocating your token</span>
+                  <span className="flex gap-1">
+                    {[0, 1, 2].map((dot) => (
+                      <motion.i key={dot} className="h-1 w-1 rounded-full bg-brand-blue" animate={{ y: [0, -4, 0] }} transition={{ duration: 0.38, repeat: Infinity, delay: dot * 0.1 }} />
+                    ))}
+                  </span>
+                </div>
+              </motion.div>
+            ) : (
+              <motion.div key="booking-confirmed" initial={{ opacity: 0, scale: 0.84 }} animate={{ opacity: 1, scale: 1 }} transition={{ type: 'spring', stiffness: 220, damping: 18 }}>
+          {/* Header */}
+          <div className="relative flex flex-col items-center overflow-hidden bg-gradient-to-br from-emerald-500 via-green-500 to-teal-600 px-6 pb-7 pt-9 text-center text-white">
+            <div className="pointer-events-none absolute -top-20 left-1/2 h-60 w-60 -translate-x-1/2 rounded-full bg-white/20 blur-3xl" />
+
+            {/* Checkmark badge with radiating rings */}
+            <div className="relative flex h-24 w-24 items-center justify-center">
+              {[0, 0.45].map((d, i) => (
+                <motion.span
+                  key={i}
+                  className="absolute h-20 w-20 rounded-full bg-white/40"
+                  initial={{ scale: 0.6, opacity: 0.55 }}
+                  animate={{ scale: 2.1, opacity: 0 }}
+                  transition={{ delay: 0.2 + d, duration: 1.1, ease: 'easeOut' }}
+                />
+              ))}
+              <motion.div
+                className="relative flex h-20 w-20 items-center justify-center rounded-full bg-white/15 ring-2 ring-white/40"
+                initial={{ scale: 0 }} animate={{ scale: 1 }}
+                transition={{ type: 'spring', stiffness: 260, damping: 14, delay: 0.05 }}
+              >
+                <svg viewBox="0 0 52 52" className="h-12 w-12">
+                  <motion.path
+                    d="M14 27 l8 8 l16 -18" fill="none" stroke="white" strokeWidth="5"
+                    strokeLinecap="round" strokeLinejoin="round"
+                    initial={{ pathLength: 0 }} animate={{ pathLength: 1 }}
+                    transition={{ delay: 0.35, duration: 0.45, ease: 'easeInOut' }}
+                  />
+                </svg>
+              </motion.div>
+            </div>
+
+            <motion.p initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className="mt-4 text-[9px] font-bold uppercase tracking-[0.3em] text-white/70">
+              Booking confirmed
+            </motion.p>
+            <motion.h2 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.46 }} className="mt-1 text-[24px] font-black tracking-tight">
+              Your token is booked!
+            </motion.h2>
+            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }} className="text-[13px] text-white/85">
+              {doctorName ? `with Dr. ${doctorName}` : ''} · {dateLabel}
+            </motion.p>
+
+            {tk && (
+              <motion.div
+                initial={{ scale: 2.6, opacity: 0, rotate: -10 }} animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                transition={{ delay: 0.72, type: 'spring', stiffness: 200, damping: 13 }}
+                className="relative mt-4 inline-flex items-center gap-2.5 overflow-hidden rounded-2xl bg-white/20 px-6 py-3 shadow-[0_12px_30px_rgba(0,0,0,0.16)] ring-1 ring-white/30 backdrop-blur-sm"
+              >
+                <motion.span className="absolute inset-y-0 w-12 -skew-x-12 bg-white/25 blur-sm" initial={{ left: '-35%' }} animate={{ left: '125%' }} transition={{ delay: 1, duration: 0.65, ease: 'easeInOut' }} />
+                <Ticket className="relative h-7 w-7" />
+                <div className="text-left leading-tight">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/70">Your Token</p>
+                  <p className="font-mono text-[26px] font-black leading-none">{tk.display_code || `#${tk.token_number}`}</p>
+                </div>
+              </motion.div>
+            )}
+          </div>
+
+          {/* Body — staggered in after the header */}
+          <motion.div variants={_container} initial="hidden" animate="show">
+            <div className="grid grid-cols-2 gap-3 p-5">
+              <motion.div variants={_item} className="rounded-2xl border border-slate-100 bg-slate-50 p-3.5 text-center">
+                <p className="text-[11px] font-medium text-slate-400">People ahead</p>
+                <p className="text-[22px] font-extrabold text-brand-navy"><CountUp value={peopleAhead} /></p>
+              </motion.div>
+              <motion.div variants={_item} className="rounded-2xl border border-slate-100 bg-slate-50 p-3.5 text-center">
+                <p className="text-[11px] font-medium text-slate-400">Est. wait</p>
+                <p className="text-[22px] font-extrabold text-brand-navy">{tk?.wait_min != null ? <>~<CountUp value={tk.wait_min} /> min</> : '—'}</p>
+              </motion.div>
+            </div>
+            <div className="px-5 pb-5">
+              <motion.div variants={_item} className={`flex items-center gap-2 rounded-xl border p-3 text-[13px] font-semibold ${leaveBy ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-slate-200 bg-slate-50 text-slate-500'}`}>
+                <Hourglass className="h-4 w-4" />
+                {leaveBy ? `Leave by ~${leaveBy} to reach on time` : 'We’ll remind you when it’s time to leave.'}
+              </motion.div>
+              <motion.div variants={_item} className="mt-4 flex gap-3">
+                <button onClick={onView} className="flex-1 rounded-xl bg-brand-blue py-2.5 text-sm font-bold text-white transition-colors hover:bg-brand-blueDark">View my appointments</button>
+                <button onClick={onAnother} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-brand-navy hover:bg-slate-50">Book another</button>
+              </motion.div>
+            </div>
+          </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </Card>
+      </motion.div>
+    </div>
+  )
+}
+
 function BookAppointment() {
   const { t } = useI18n()
   const navigate = useNavigate()
@@ -54,15 +244,22 @@ function BookAppointment() {
     doctorId: params.get('doctor') || '',
     affiliationId: params.get('affiliation') || '',
     date: '',
-    time: '',
     visitType: 'regular',
     reason: '',
     consent: false,
+    bookingFor: 'self',   // 'self' or a family member_id (string)
   })
-  const [slots, setSlots] = useState([])
+  const [family, setFamily] = useState([])
   const [doctorAffiliations, setDoctorAffiliations] = useState([])
-  const [slotState, setSlotState] = useState({ loading: false, reason: null })
+  // Day-level availability (is the doctor consulting that day) + alternatives.
+  const [dayState, setDayState] = useState({ loading: false, available: null, reason: null })
   const [slotSuggestions, setSlotSuggestions] = useState({ sameDate: [], nearbyDates: [] })
+  // Token queue preview for the chosen doctor + date (token model, not slots).
+  const [queue, setQueue] = useState(null)
+  // Set after a successful booking → shows the allocated token + leave-by.
+  const [booked, setBooked] = useState(null)
+  // Online booking-fee config (flat fee; consultation is paid at the clinic).
+  const [payCfg, setPayCfg] = useState({ enabled: false, booking_fee: 0 })
   const [errors, setErrors] = useState({})
   const [banner, setBanner] = useState(null)
   const [submitting, setSubmitting] = useState(false)
@@ -80,6 +277,19 @@ function BookAppointment() {
     }
   }, [bookableDoctors, form.doctorId])
 
+  // Learn whether an online booking fee applies (and how much).
+  useEffect(() => {
+    paymentsApi.config().then(setPayCfg).catch(() => {})
+  }, [])
+
+  // Load the patient's dependents so they can book "for" one of them.
+  useEffect(() => {
+    if (!patient?.patient_id) return
+    patientsApi.family(patient.patient_id)
+      .then((rows) => setFamily((rows || []).filter((m) => m.is_active)))
+      .catch(() => setFamily([]))
+  }, [patient?.patient_id])
+
   const doctor = doctorsById[form.doctorId]
   const contextAffiliations = form.doctorId ? affiliationsByDoctor[form.doctorId] || [] : []
   const affiliations = doctorAffiliations.length ? doctorAffiliations : contextAffiliations
@@ -88,6 +298,7 @@ function BookAppointment() {
   const destination = affiliation?.latitude != null && affiliation?.longitude != null
     ? { ...affiliation, latitude: affiliation.latitude, longitude: affiliation.longitude }
     : clinic
+  const feeAmount = Number(affiliation?.consultation_fee ?? doctor?.consultation_fee ?? 0)
 
   useEffect(() => {
     if (form.doctorId && !form.affiliationId && affiliations.length) {
@@ -116,24 +327,30 @@ function BookAppointment() {
     return () => { active = false }
   }, [form.doctorId, form.affiliationId])
 
-  // Load real available slots whenever doctor or date changes.
+  // When doctor + date change: check the doctor consults that day, and (if so)
+  // load the live token queue so the patient sees how busy it is before booking.
   useEffect(() => {
     if (!form.doctorId || !form.affiliationId || !form.date) {
-      setSlots([])
-      setSlotState({ loading: false, reason: null })
+      setDayState({ loading: false, available: null, reason: null })
       setSlotSuggestions({ sameDate: [], nearbyDates: [] })
+      setQueue(null)
       return
     }
     let active = true
-    setSlotState({ loading: true, reason: null })
+    setDayState({ loading: true, available: null, reason: null })
     setSlotSuggestions({ sameDate: [], nearbyDates: [] })
-    setForm((f) => ({ ...f, time: '' }))
+    setQueue(null)
     ;(async () => {
       try {
         const res = await appointmentsApi.availableSlots(form.doctorId, form.date, form.affiliationId)
         if (!active) return
-        setSlots(res?.slots || [])
-        setSlotState({ loading: false, reason: res?.available ? null : res?.reason || t('ppage.noSlots') })
+        setDayState({ loading: false, available: !!res?.available, reason: res?.available ? null : res?.reason || t('ppage.noSlots') })
+        if (res?.available) {
+          // Token model: don't pick a slot — just show the queue length.
+          tokensApi.queue(form.doctorId, form.date, form.affiliationId)
+            .then((q) => { if (active) setQueue(q) })
+            .catch(() => { if (active) setQueue(null) })
+        }
         if (!res?.available) {
           const otherLocations = await Promise.all(
             affiliations
@@ -166,8 +383,8 @@ function BookAppointment() {
         }
       } catch (err) {
         if (!active) return
-        setSlots([])
-        setSlotState({ loading: false, reason: err.message || t('ppage.couldNotLoadSlots') })
+        setQueue(null)
+        setDayState({ loading: false, available: false, reason: err.message || t('ppage.couldNotLoadSlots') })
       }
     })()
     return () => {
@@ -181,15 +398,22 @@ function BookAppointment() {
     setErrors((current) => ({ ...current, [key]: undefined }))
   }
 
-  // Travel minutes: prefer GPS coords + clinic coords; else the manual distance.
-  const travelMin = useMemo(() => {
-    if (trip.lat != null && trip.lng != null) {
-      const m = travelMinutesBetween({ lat: trip.lat, lng: trip.lng }, destination)
-      if (m != null) return m
+  // Travel minutes: GPS/address coords → instant haversine, then refined to real
+  // road time via Google Distance Matrix; manual distance → straight estimate.
+  const [travelMin, setTravelMin] = useState(null)
+  useEffect(() => {
+    let cancelled = false
+    if (trip.lat == null || trip.lng == null) {
+      const km = Number(trip.km)
+      setTravelMin(Number.isFinite(km) && km > 0 ? travelMinutesFromKm(km) : null)
+      return undefined
     }
-    const km = Number(trip.km)
-    if (Number.isFinite(km) && km > 0) return travelMinutesFromKm(km)
-    return null
+    const origin = { lat: trip.lat, lng: trip.lng }
+    setTravelMin(travelMinutesBetween(origin, destination))  // instant estimate
+    roadTravelMinutes(origin, destination).then((m) => {       // refine via Google
+      if (!cancelled && m != null) setTravelMin(m)
+    })
+    return () => { cancelled = true }
   }, [trip.lat, trip.lng, trip.km, destination])
 
   const useMyLocation = async () => {
@@ -225,6 +449,16 @@ function BookAppointment() {
     }
   }
 
+  // User picked a suggestion from the autocomplete → store its coordinates so
+  // the leave-by time uses their real journey (no separate "Find" step needed).
+  const selectAddress = (place) => {
+    setTrip((tr) => ({ ...tr, lat: place.lat, lng: place.lng, km: '', label: place.label, address: place.label, geoLoading: false, geoError: null }))
+  }
+  // While typing, keep the text but drop any stale coordinates until they pick.
+  const typeAddress = (text) => {
+    setTrip((tr) => ({ ...tr, address: text, lat: null, lng: null }))
+  }
+
   const setKm = (event) => {
     const km = event.target.value
     // Switching to a manual distance clears any captured GPS point.
@@ -242,7 +476,6 @@ function BookAppointment() {
     if (!form.doctorId) nextErrors.doctorId = t('ppage.valSelectDoctor')
     if (!form.affiliationId) nextErrors.affiliationId = 'Select clinic or practice location'
     if (!form.date) nextErrors.date = t('ppage.valSelectDate')
-    if (!form.time) nextErrors.time = t('ppage.valSelectTime')
     if (!form.reason.trim()) nextErrors.reason = t('ppage.valReason')
     if (!form.consent) nextErrors.consent = t('ppage.valConsent')
     setErrors(nextErrors)
@@ -250,12 +483,13 @@ function BookAppointment() {
 
     setSubmitting(true)
     try {
-      await appointmentsApi.book({
+      // Token model: no slot_time — the patient just joins the queue.
+      const booking = {
         doctor_id: Number(form.doctorId),
         affiliation_id: Number(form.affiliationId),
         patient_id: patient.patient_id,
+        family_member_id: form.bookingFor === 'self' ? null : Number(form.bookingFor),
         appointment_date: form.date,
-        slot_time: form.time,
         appointment_type: form.visitType,
         notes: form.reason,
         source: 'app',
@@ -263,11 +497,44 @@ function BookAppointment() {
         origin_lng: trip.lng,
         origin_label: trip.label,
         travel_minutes: travelMin,
-      })
-      navigate('/patient-dashboard/appointments', {
-        replace: true,
-        state: { booked: true, appointment: { doctor: doctor?.name } },
-      })
+      }
+      // Ask the server whether a booking fee is due (and create a Razorpay order).
+      const order = await paymentsApi.createOrder(booking)
+      let appt
+      if (order.payment_required) {
+        const ready = await loadRazorpay()
+        if (!ready) throw new Error('Could not load the payment gateway. Please try again.')
+        appt = await new Promise((resolve, reject) => {
+          const rzp = new window.Razorpay({
+            key: order.key_id,
+            order_id: order.order_id,
+            amount: order.amount,
+            currency: order.currency,
+            name: clinic?.name || 'Doctor Mitra',
+            description: `Consultation with ${doctor?.name || 'doctor'}`,
+            prefill: { name: patient?.name || '', contact: patient?.phone || '', email: patient?.email || '' },
+            theme: { color: '#2563eb' },
+            handler: (resp) => {
+              // Payment succeeded → server verifies the signature, then books.
+              paymentsApi.confirm({
+                razorpay_order_id: resp.razorpay_order_id,
+                razorpay_payment_id: resp.razorpay_payment_id,
+                razorpay_signature: resp.razorpay_signature,
+                booking,
+              }).then(resolve).catch(reject)
+            },
+            modal: { ondismiss: () => reject(new Error('Payment cancelled — your token was not booked.')) },
+          })
+          rzp.open()
+        })
+      } else {
+        // Free consult or payments disabled → book directly (no payment step).
+        appt = await appointmentsApi.book(booking)
+      }
+      // Fetch the freshly-allocated token + leave-by to show on the confirmation.
+      let token = null
+      try { token = await tokensApi.estimate({ appointment_id: appt.appointment_id }) } catch { /* token shows on dashboard */ }
+      setBooked({ appt, token })
     } catch (err) {
       setBanner(err.message || t('ppage.couldNotBook'))
     } finally {
@@ -276,6 +543,19 @@ function BookAppointment() {
   }
 
   if (ctxLoading) return <p className="text-sm text-slate-400">{t('pcommon.loading')}</p>
+
+  // ---- Confirmation: show the allocated token + leave-by after booking ----
+  if (booked) {
+    return (
+      <BookedCard
+        booked={booked}
+        doctorName={doctor?.name}
+        dateLabel={readableDate(form.date)}
+        onView={() => navigate('/patient-dashboard/appointments')}
+        onAnother={() => { setBooked(null); setForm((f) => ({ ...f, date: '', reason: '', consent: false })) }}
+      />
+    )
+  }
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-5">
@@ -294,8 +574,43 @@ function BookAppointment() {
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_320px]">
         <Card className="p-5">
           <h3 className="mb-4 text-[17px] font-bold text-brand-navy">{t('ppage.apptDetails')}</h3>
+          {/* Booking for — "Myself" beside a separate family-member dropdown */}
+          <div className="mb-4">
+            <label className="mb-1.5 block text-[13px] font-semibold text-slate-600">{t('ppage.bookingFor')}</label>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setForm((f) => ({ ...f, bookingFor: 'self' }))}
+                className={`flex items-center gap-1.5 rounded-xl px-3.5 py-2.5 text-[13px] font-semibold transition-colors ${
+                  form.bookingFor === 'self'
+                    ? 'bg-brand-blue text-white shadow-sm'
+                    : 'border border-slate-200 text-slate-600 hover:border-brand-blue/40 hover:text-brand-blue'
+                }`}
+              >
+                <UserRound className="h-4 w-4" /> {patient?.name ? `${t('ppage.myself')} (${patient.name})` : t('ppage.myself')}
+              </button>
+              <select
+                value={form.bookingFor === 'self' ? '' : form.bookingFor}
+                onChange={(e) => {
+                  const v = e.target.value
+                  if (v === '__add__') { navigate('/patient-dashboard/profile?addFamily=1'); return }
+                  if (!v) return
+                  setForm((f) => ({ ...f, bookingFor: v }))
+                }}
+                className={`min-w-[11rem] rounded-xl border bg-white px-3.5 py-2.5 text-[13px] font-semibold outline-none transition-colors focus:border-brand-blue ${
+                  form.bookingFor !== 'self' ? 'border-brand-blue text-brand-navy' : 'border-slate-200 text-slate-600'
+                }`}
+              >
+                <option value="">{t('ppage.familyTitle')}</option>
+                {family.map((m) => (
+                  <option key={m.member_id} value={String(m.member_id)}>{m.name}{m.relation ? ` — ${m.relation}` : ''}</option>
+                ))}
+                <option value="__add__">＋ {t('ppage.addFamily')}</option>
+              </select>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <TextInput label={t('ppage.patientName')} icon={UserRound} value={patient?.name || ''} disabled />
             <TextInput label={t('ppage.mobileNumber')} icon={Phone} prefix="+91" value={patient?.phone || ''} disabled />
             <TextInput label={t('ppage.email')} icon={Mail} value={patient?.email || ''} disabled />
             <SelectInput label={t('ppage.visitType')} required icon={Stethoscope} value={form.visitType} onChange={set('visitType')}>
@@ -324,19 +639,35 @@ function BookAppointment() {
               ))}
             </SelectInput>
             <TextInput label={t('ppage.apptDate')} required icon={CalendarDays} type="date" min={todayISO()} value={form.date} onChange={set('date')} error={errors.date} />
-            <SelectInput label={t('ppage.preferredTime')} required icon={Clock} value={form.time} onChange={set('time')} error={errors.time} disabled={slotState.loading || !slots.length}>
-              <option value="">{slotState.loading ? t('ppage.loadingSlots') : slots.length ? t('ppage.selectSlotShort') : t('ppage.noSlotsShort')}</option>
-              {slots.map((s) => <option key={s.time} value={s.time}>{s.label || prettyTime(s.time)}</option>)}
-            </SelectInput>
           </div>
 
-          {form.date && slotState.reason && (
+          {/* Token queue preview — no slot to pick; just show how busy it is. */}
+          {form.date && dayState.available && (
+            <div className="mt-4 flex flex-wrap items-center gap-4 rounded-xl border border-brand-blue/15 bg-brand-blueLight/40 p-4">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-brand-blue shadow-sm"><Ticket className="h-5 w-5" /></span>
+              <div className="flex-1">
+                <p className="text-[14px] font-bold text-brand-navy">
+                  {doctor?.name || 'This doctor'} has {queue?.total_waiting ?? '…'} {(queue?.total_waiting === 1) ? 'patient' : 'patients'} in the queue
+                </p>
+                <p className="text-[12.5px] text-slate-500">
+                  {queue == null ? 'Checking the queue…'
+                    : `You'll get the next token · estimated wait ~${(queue.total_waiting || 0) * 10} min`}
+                </p>
+              </div>
+              <span className="rounded-lg bg-white px-3 py-1.5 text-[12px] font-bold text-brand-blue">No appointment time needed</span>
+            </div>
+          )}
+          {form.date && dayState.loading && (
+            <p className="mt-4 text-[12.5px] text-slate-400">Checking availability…</p>
+          )}
+
+          {form.date && dayState.reason && (
             <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-[12.5px] font-medium text-amber-700">
               <div className="flex flex-wrap items-center gap-2">
                 <AlertTriangle className="h-4 w-4" />
                 {affiliation?.name
                   ? `${doctor?.name || 'This doctor'} is not available at ${affiliation.name} on ${readableDate(form.date)}.`
-                  : slotState.reason}
+                  : dayState.reason}
               </div>
               {slotSuggestions.sameDate.length > 0 && (
                 <div className="mt-3">
@@ -373,7 +704,7 @@ function BookAppointment() {
                 </div>
               )}
               {!slotSuggestions.sameDate.length && !slotSuggestions.nearbyDates.length && (
-                <p className="mt-2 text-[12px]">{slotState.reason}</p>
+                <p className="mt-2 text-[12px]">{dayState.reason}</p>
               )}
             </div>
           )}
@@ -430,13 +761,16 @@ function BookAppointment() {
                   {trip.for === 'self' ? t('ppage.yourAddress') : t('ppage.patientAddress')}
                 </p>
                 <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={trip.address}
-                    onChange={(e) => setTrip((tr) => ({ ...tr, address: e.target.value }))}
-                    placeholder={t('ppage.addressPlaceholder')}
-                    className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-brand-navy outline-none focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/10"
-                  />
+                  <div className="min-w-0 flex-1">
+                    <AddressAutocomplete
+                      value={trip.address}
+                      onChange={typeAddress}
+                      onSelect={selectAddress}
+                      placeholder={t('ppage.addressPlaceholder')}
+                      biasLat={destination?.latitude}
+                      biasLng={destination?.longitude}
+                    />
+                  </div>
                   <button
                     type="button"
                     onClick={locateFromAddress}
@@ -497,6 +831,17 @@ function BookAppointment() {
                   {t('ppage.optionalReminder')}
                 </p>
               )}
+
+              {destination?.latitude != null && destination?.longitude != null && (
+                <ClinicMap
+                  clinic={destination}
+                  origin={trip.lat != null && trip.lng != null ? { lat: trip.lat, lng: trip.lng } : null}
+                  clinicLabel={affiliation?.name || clinic?.name || 'Clinic'}
+                  originLabel={trip.label || 'You'}
+                  height={220}
+                  className="mt-3"
+                />
+              )}
             </div>
 
             <Checkbox checked={form.consent} onChange={set('consent')} className="rounded-xl bg-slate-50 p-3">
@@ -518,7 +863,7 @@ function BookAppointment() {
               disabled={submitting}
               className="inline-flex items-center gap-2 rounded-xl bg-brand-blue px-5 py-2.5 text-sm font-bold text-white shadow-[0_14px_30px_rgba(37,99,235,0.24)] transition-colors hover:bg-brand-blueDark disabled:opacity-60"
             >
-              <CheckCircle2 className="h-4 w-4" /> {submitting ? t('ppage.booking') : t('ppage.confirmAppointment')}
+              <CheckCircle2 className="h-4 w-4" /> {submitting ? t('ppage.booking') : (payCfg.enabled && payCfg.booking_fee > 0) ? `Pay ₹${payCfg.booking_fee} & Book Token` : 'Book Token'}
             </button>
           </div>
         </Card>
@@ -536,12 +881,24 @@ function BookAppointment() {
             </p>
             <p className="flex items-start gap-2 text-slate-600">
               <CalendarDays className="mt-0.5 h-4 w-4 text-slate-400" />
-              {form.date || t('ppage.selectDate')}{form.time ? t('ppage.atTime', { time: prettyTime(form.time) }) : ''}
+              {form.date ? readableDate(form.date) : t('ppage.selectDate')}
             </p>
+            {form.date && dayState.available && (
+              <p className="flex items-start gap-2 text-slate-600">
+                <Ticket className="mt-0.5 h-4 w-4 text-slate-400" />
+                {queue == null ? 'Checking queue…' : `${queue.total_waiting || 0} in queue · you get the next token`}
+              </p>
+            )}
             <p className="flex items-start gap-2 text-slate-600">
               <IndianRupee className="mt-0.5 h-4 w-4 text-slate-400" />
-              {t('ppage.consultationFee', { fee: affiliation?.consultation_fee != null ? Number(affiliation.consultation_fee) : doctor ? Number(doctor.consultation_fee) : 0 })}
+              Consultation ₹{feeAmount} <span className="text-slate-400">· pay at clinic</span>
             </p>
+            {payCfg.enabled && payCfg.booking_fee > 0 && (
+              <p className="flex items-start gap-2 font-semibold text-brand-navy">
+                <IndianRupee className="mt-0.5 h-4 w-4 text-brand-blue" />
+                Booking fee ₹{payCfg.booking_fee} <span className="font-normal text-slate-400">· pay now to reserve token</span>
+              </p>
+            )}
             {travelMin != null && (
               <p className="flex items-start gap-2 text-slate-600">
                 <Navigation className="mt-0.5 h-4 w-4 text-slate-400" />

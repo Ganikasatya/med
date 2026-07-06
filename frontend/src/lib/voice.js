@@ -121,13 +121,24 @@ let _speakSeq = 0
 
 /** Stop any cloud-TTS audio that's currently playing. */
 export function stopCloudSpeak() {
-  if (_ttsDone) {
-    try { _ttsDone(false) } catch { /* ignore */ }
-    _ttsDone = null
+  // Grab the refs and clear them first, then HARD-STOP the element. The old code
+  // called _ttsDone(false) (which nulled _ttsAudio) before the pause block, so the
+  // pause was skipped and the outgoing Cartesia clip kept playing — two voices at
+  // once. Pause + reset the element explicitly so only the newest prompt is heard.
+  const audio = _ttsAudio
+  const finish = _ttsDone
+  _ttsAudio = null
+  _ttsDone = null
+  if (audio) {
+    try {
+      audio.onended = audio.onerror = audio.onpause = null
+      audio.pause()
+      audio.currentTime = 0
+      audio.src = ''
+    } catch { /* ignore */ }
   }
-  if (_ttsAudio) {
-    try { _ttsAudio.pause() } catch { /* ignore */ }
-    _ttsAudio = null
+  if (finish) {
+    try { finish(false) } catch { /* ignore */ }
   }
 }
 
@@ -250,6 +261,18 @@ export function stopSpeaking() {
   if (ttsSupported()) {
     try { window.speechSynthesis.cancel() } catch { /* ignore */ }
   }
+}
+
+/**
+ * The current speech "turn" id. Every speak()/stopSpeaking() bumps it. A chained
+ * narration (e.g. the login voice guide) can capture the turn before a prompt and
+ * check afterwards whether it was superseded by a newer voice (a button press),
+ * so it can stop instead of talking over the new prompt. `speak()` bumps the turn
+ * exactly once (its internal stopSpeaking), so `speakTurn() === before + 1` after
+ * an `await speak()` means "not interrupted".
+ */
+export function speakTurn() {
+  return _speakSeq
 }
 
 /**

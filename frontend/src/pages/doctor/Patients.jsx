@@ -1,12 +1,15 @@
 import { useMemo, useState } from 'react'
+import { AnimatePresence } from 'framer-motion'
 import { Search, UserPlus, Users, UserCheck } from 'lucide-react'
 import { Card, StatCard, StatusBadge, PageHeading, Avatar } from '../../components/clinic/ui.jsx'
+import PatientHistoryDrawer from '../../components/patient/PatientHistoryDrawer.jsx'
 import { useDoctorCtx } from '../../context/DoctorContext.jsx'
 import { ageSex } from '../../lib/format.js'
 
 function Patients() {
   const { patientsById, loading } = useDoctorCtx()
   const [q, setQ] = useState('')
+  const [selected, setSelected] = useState(null)
 
   const all = useMemo(() => Object.values(patientsById), [patientsById])
   const rows = useMemo(() => {
@@ -18,7 +21,7 @@ function Patients() {
 
   return (
     <div className="flex flex-col gap-4">
-      <PageHeading title="Patient List" subtitle="All patients registered at your clinic.">
+      <PageHeading title="Patient List" subtitle="All patients registered at your clinic. Click a patient to view & record their history.">
         <div className="flex items-center gap-2 rounded-xl border border-slate-200 px-3">
           <Search className="h-4 w-4 text-slate-400" />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search patient…"
@@ -43,11 +46,14 @@ function Patients() {
           </thead>
           <tbody className="text-[13.5px]">
             {rows.map((p) => (
-              <tr key={p.patient_id} className="border-t border-slate-50">
+              <tr key={p.patient_id} onClick={() => setSelected(p)} className="cursor-pointer border-t border-slate-50 hover:bg-slate-50/70">
                 <td className="py-3 pr-4">
                   <div className="flex items-center gap-2.5">
                     <Avatar name={p.name} className="h-9 w-9 text-xs" />
-                    <span className="font-medium text-brand-navy">{p.name}</span>
+                    <div className="leading-tight">
+                      <span className="font-medium text-brand-navy">{p.name}</span>
+                      {p.uhid && <p className="font-mono text-[11px] font-semibold text-brand-blue">{p.uhid}</p>}
+                    </div>
                   </div>
                 </td>
                 <td className="py-3 pr-4 text-slate-500">{ageSex(p)}</td>
@@ -66,6 +72,10 @@ function Patients() {
           <p className="py-8 text-center text-sm text-slate-400">No patients found.</p>
         ) : null}
       </Card>
+
+      <AnimatePresence>
+        {selected && <PatientHistoryDrawer patient={selected} onClose={() => setSelected(null)} />}
+      </AnimatePresence>
     </div>
   )
 }

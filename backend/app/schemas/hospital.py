@@ -3,7 +3,17 @@ from datetime import time
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+
+
+def _trim_to_none(v: Optional[str]) -> Optional[str]:
+    """Normalize an optional free-form ID: trim whitespace, blank -> None.
+    Used for HFR ID (ABDM Health Facility Registry); formats vary, so no strict
+    pattern is enforced."""
+    if v is None:
+        return None
+    s = str(v).strip()
+    return s or None
 
 
 # ---- Hospital ----
@@ -17,6 +27,8 @@ class HospitalCreate(BaseModel):
     phone: str = ""
     email: Optional[EmailStr] = None
     gstin: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 
 class HospitalUpdate(BaseModel):
@@ -29,9 +41,12 @@ class HospitalUpdate(BaseModel):
     email: Optional[EmailStr] = None
     logo_url: Optional[str] = None
     gstin: Optional[str] = None
+    hfr_id: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     is_active: Optional[bool] = None
+
+    _norm_hfr = field_validator("hfr_id")(_trim_to_none)
 
 
 class HospitalOut(BaseModel):
@@ -47,6 +62,7 @@ class HospitalOut(BaseModel):
     email: str
     logo_url: Optional[str] = None
     gstin: Optional[str] = None
+    hfr_id: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     status: str
@@ -58,9 +74,15 @@ class ClinicRegister(BaseModel):
     clinic_name: str = Field(..., min_length=1, max_length=150)
     clinic_type: str = ""
     registration_number: str = ""
+    hfr_id: Optional[str] = None
     city: str = ""
     area: str = ""
     address: str = ""
+    pincode: str = ""
+    # Precise clinic coordinates from the Google Places picker (null when the
+    # user typed a plain address without picking a suggestion).
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     owner_name: str = Field(..., min_length=1)
     phone: str = Field(..., pattern=r"^\d{10}$")
     email: EmailStr

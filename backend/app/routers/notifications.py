@@ -253,12 +253,12 @@ def notification_settings(body: NotificationSettings, me: User = Depends(require
 def notification_test(body: NotificationTest, me: User = Depends(require_permission("notification", "create")), db: Session = Depends(get_db)):
     hid = me.hospital_id
     if body.channel == "sms":
-        n = notify.send_sms(db, body.phone or "9999999999", "Test SMS from RuralOP", ntype="general", hospital_id=hid)
+        n = notify.send_sms(db, body.phone or "9999999999", "Test SMS from TapCure", ntype="general", hospital_id=hid)
     elif body.channel == "whatsapp":
-        n = notify.send_whatsapp(db, body.phone or "9999999999", "Test WhatsApp from RuralOP", hospital_id=hid)
+        n = notify.send_whatsapp(db, body.phone or "9999999999", "Test WhatsApp from TapCure", hospital_id=hid)
     elif body.channel == "email":
-        n = notify.send_email(db, body.email or "test@example.com", "Test", "Test email from RuralOP", hospital_id=hid)
+        n = notify.send_email(db, body.email or "test@example.com", "Test", "Test email from TapCure", hospital_id=hid)
     else:
-        n = notify.send_push(db, "test-device", "Test", "Test push from RuralOP", hospital_id=hid)
+        n = notify.send_push(db, "test-device", "Test", "Test push from TapCure", hospital_id=hid)
     db.commit()
     return {"ok": True, "channel": body.channel, "notification_id": n.notification_id, "status": n.status}

@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import AssistantSidebar from './AssistantSidebar.jsx'
 import AssistantTopbar from './AssistantTopbar.jsx'
+import DelayToaster from '../common/DelayToaster.jsx'
 
 /**
  * Shared shell for the Assistant console: sidebar + topbar + routed content.
@@ -11,8 +12,14 @@ import AssistantTopbar from './AssistantTopbar.jsx'
  */
 function AssistantLayout() {
   const [navOpen, setNavOpen] = useState(false)
+  const [dark, setDark] = useState(() => localStorage.getItem('assistant-theme') === 'dark')
+
+  useEffect(() => {
+    localStorage.setItem('assistant-theme', dark ? 'dark' : 'light')
+  }, [dark])
+
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-slate-50">
+    <div className={`theme-reception ${dark ? 'theme-dark' : ''} flex h-screen w-screen overflow-hidden bg-teal-100/60`}>
       <AssistantSidebar open={navOpen} onClose={() => setNavOpen(false)} />
       {navOpen && (
         <div
@@ -22,11 +29,13 @@ function AssistantLayout() {
         />
       )}
       <div className="flex min-w-0 flex-1 flex-col">
-        <AssistantTopbar onMenu={() => setNavOpen(true)} />
+        <AssistantTopbar onMenu={() => setNavOpen(true)} dark={dark} onToggleTheme={() => setDark((d) => !d)} />
         <main className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-4">
           <Outlet />
         </main>
       </div>
+      {/* Real-time "doctor running late" popup for the front desk */}
+      <DelayToaster channel="push" />
     </div>
   )
 }

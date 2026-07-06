@@ -69,9 +69,9 @@ export const landingT = {
   // ---- TestimonialCard ----
   'test.heading': { en: 'What our users say', te: 'మా వినియోగదారులు ఏమంటున్నారు', hi: 'हमारे उपयोगकर्ता क्या कहते हैं' },
   'test.ramesh.quote': {
-    en: 'Doctor Mitra helped me save so much time. I got my token before reaching the clinic and the experience was smooth.',
-    te: 'Doctor Mitra నాకు చాలా సమయం ఆదా చేయడంలో సహాయపడింది. క్లినిక్‌కు చేరుకోకముందే నా టోకెన్ వచ్చింది, అనుభవం సాఫీగా సాగింది.',
-    hi: 'Doctor Mitra ने मेरा बहुत समय बचाने में मदद की। मुझे क्लिनिक पहुंचने से पहले ही टोकन मिल गया और अनुभव सहज रहा।',
+    en: 'TapCure helped me save so much time. I got my token before reaching the clinic and the experience was smooth.',
+    te: 'TapCure నాకు చాలా సమయం ఆదా చేయడంలో సహాయపడింది. క్లినిక్‌కు చేరుకోకముందే నా టోకెన్ వచ్చింది, అనుభవం సాఫీగా సాగింది.',
+    hi: 'TapCure ने मेरा बहुत समय बचाने में मदद की। मुझे क्लिनिक पहुंचने से पहले ही टोकन मिल गया और अनुभव सहज रहा।',
   },
 
   // ---- AppDownloadBanner ----
@@ -205,7 +205,7 @@ export const landingT = {
   'journey.importantNote': { en: 'Important Note', te: 'ముఖ్య గమనిక', hi: 'महत्वपूर्ण नोट' },
   'journey.feeHeadline': { en: 'Doctor fee is paid at the hospital / clinic', te: 'డాక్టర్ ఫీజు ఆసుపత్రి / క్లినిక్‌లో చెల్లించబడుతుంది', hi: 'डॉक्टर शुल्क अस्पताल / क्लिनिक में भरा जाता है' },
   'journey.feeBodyPrefix': { en: 'The', te: '', hi: '' },
-  'journey.feeBodyBold': { en: 'Doctor Mitra platform fee is only ₹10', te: 'Doctor Mitra ప్లాట్‌ఫారమ్ ఫీజు కేవలం ₹10', hi: 'Doctor Mitra प्लेटफ़ॉर्म शुल्क केवल ₹10 है' },
+  'journey.feeBodyBold': { en: 'TapCure platform fee is only ₹10', te: 'TapCure ప్లాట్‌ఫారమ్ ఫీజు కేవలం ₹10', hi: 'TapCure प्लेटफ़ॉर्म शुल्क केवल ₹10 है' },
   'journey.feeBodySuffix': {
     en: ". The doctor's consultation fee is paid directly at the clinic / hospital.",
     te: '. డాక్టర్ సంప్రదింపు ఫీజు నేరుగా క్లినిక్ / ఆసుపత్రిలో చెల్లించబడుతుంది.',

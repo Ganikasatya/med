@@ -1,0 +1,811 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  /* Shared compact input used in dashboard forms */
+  .field-input {
+    @apply w-full appearance-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-brand-navy outline-none transition-colors placeholder:text-slate-400 focus:border-brand-blue;
+  }
+}
+
+@layer base {
+  /* Brand palette as RGB channels (consumed by tailwind.config brand.*).
+     Defaults = original royal-blue brand — unchanged for every console. */
+  :root {
+    --brand-blue: 37 99 235;        /* #2563eb */
+    --brand-blueDark: 29 78 216;    /* #1d4ed8 */
+    --brand-blueLight: 239 246 255; /* #eff6ff */
+    --brand-teal: 13 148 136;       /* #0d9488 */
+    --brand-green: 22 163 74;       /* #16a34a */
+    --brand-greenLight: 236 253 245;/* #ecfdf5 */
+    --brand-navy: 15 39 66;         /* #0f2742 */
+  }
+
+  /* Receptionist console re-skin (pilot) — "CareNow" teal/mint look. Applied via
+     the assistant shell only, so doctor/patient/clinic keep the default blue. */
+  .theme-reception {
+    --brand-blue: 13 148 136;       /* teal-600  — primary actions/links */
+    --brand-blueDark: 15 118 110;   /* teal-700  — hover */
+    --brand-blueLight: 240 253 250; /* teal-50   — tinted surfaces */
+    --brand-navy: 15 23 42;         /* slate-900 — near-black headings */
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply font-sans text-brand-navy antialiased;
+    margin: 0;
+  }
+
+  /* Prevent horizontal scroll across the whole page */
+  html {
+    overflow-x: hidden;
+  }
+}
+
+@layer utilities {
+  /* Scrollable but with no visible scrollbar (used by the sidebar nav). */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Thin custom scrollbar used only inside the sidebar if content overflows */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 5px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: #cbd5e1;
+    border-radius: 9999px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+/* Assistant dashboard quick actions: spotlight the active action while nearby
+   cards recede. Kept outside Tailwind layers so these transforms win over
+   utility styles without needing `!important`. */
+.quick-action-card {
+  transform: scale(1);
+  transform-origin: center;
+  transition: transform 400ms ease, filter 400ms ease, opacity 400ms ease,
+    box-shadow 400ms ease;
+  will-change: transform, filter;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .quick-actions-grid:hover > .quick-action-card:hover,
+  .quick-action-card:focus-visible {
+    z-index: 10;
+    transform: scale(1.08);
+    box-shadow: 0 14px 28px rgba(13, 148, 136, 0.24);
+  }
+
+  .quick-actions-grid:hover > .quick-action-card:not(:hover) {
+    filter: blur(6px);
+    opacity: 0.72;
+    transform: scale(0.9);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quick-action-card {
+    transition: none;
+  }
+
+  .quick-actions-grid:hover > .quick-action-card:hover,
+  .quick-action-card:focus-visible,
+  .quick-actions-grid:hover > .quick-action-card:not(:hover) {
+    filter: none;
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: none;
+  }
+}
+
+/* ---- Patient Journey page reveal animations (plain CSS so never purged) ---- */
+@keyframes dm-fade-up {
+  from { opacity: 0; transform: translateY(22px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes dm-pop-in {
+  0% { opacity: 0; transform: scale(0.5); }
+  60% { transform: scale(1.12); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes dm-grow-x {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+.dm-fade-up { animation: dm-fade-up 0.6s cubic-bezier(0.22, 0.68, 0.28, 1) both; }
+.dm-pop-in { animation: dm-pop-in 0.55s cubic-bezier(0.22, 0.68, 0.28, 1) both; }
+.dm-grow-x { transform-origin: left center; animation: dm-grow-x 0.5s ease-out both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .dm-fade-up, .dm-pop-in, .dm-grow-x { animation: none; }
+}
+
+/* ---- Cute 3D brand wordmark (landing logo) ---- */
+.logo-3d {
+  font-family: 'Fredoka', 'Inter', system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  line-height: 1;
+}
+/* Bright face on top, darker shades stacked downward = puffy 3D extrusion. */
+.logo-3d-teal {
+  color: #14b8a6;
+  text-shadow:
+    0 1px 0 #0f9e90, 0 2px 0 #0d9488, 0 3px 0 #0b7d72,
+    0 4px 0 #0a6f66, 0 7px 9px rgba(15, 39, 66, 0.28);
+}
+.logo-3d-blue {
+  color: #3b82f6;
+  text-shadow:
+    0 1px 0 #2f6ef0, 0 2px 0 #2563eb, 0 3px 0 #1f54c9,
+    0 4px 0 #1c4cb8, 0 7px 9px rgba(15, 39, 66, 0.28);
+}
+.logo-tagline {
+  font-family: 'Fredoka', 'Inter', system-ui, sans-serif;
+  font-weight: 500;
+}
+
+/* Reception re-skin: a few shared components use literal Tailwind blues
+   (bg-blue-100, text-blue-700, …) rather than the brand token. Remap those to
+   teal — scoped to .theme-reception only, so other consoles are untouched.
+   `.theme-reception .x` (specificity 0,2,0) beats the utility class (0,1,0). */
+.theme-reception .bg-blue-50 { background-color: #f0fdfa; }
+.theme-reception .bg-blue-100 { background-color: #ccfbf1; }
+.theme-reception .bg-blue-200 { background-color: #99f6e4; }
+.theme-reception .text-blue-100 { color: #ccfbf1; }
+.theme-reception .text-blue-500 { color: #14b8a6; }
+.theme-reception .text-blue-600 { color: #0d9488; }
+.theme-reception .text-blue-700 { color: #0f766e; }
+.theme-reception .border-blue-100 { border-color: #99f6e4; }
+.theme-reception .border-blue-200 { border-color: #99f6e4; }
+.theme-reception .hover\:bg-blue-50:hover { background-color: #f0fdfa; }
+.theme-reception .hover\:bg-blue-100:hover { background-color: #ccfbf1; }
+
+/* ============================================================================
+   DARK MODE — Front Desk console only. Toggled by adding `.theme-dark` to the
+   assistant shell root (see AssistantLayout). Uses the same scoped-override
+   technique as the reception re-skin above: `.theme-dark .x` (0,2,0) beats the
+   raw utility class (0,1,0), so individual pages need no `dark:` variants.
+   ========================================================================== */
+.theme-reception.theme-dark {
+  /* Neutral-dark palette (gray surfaces). Primary stays the brand teal. */
+  --brand-blueLight: 45 45 45;     /* #2D2D2D — tinted chips, one step above surface */
+  --brand-greenLight: 22 45 34;    /* #162D22 — dark green chip surface */
+  --brand-navy: 255 255 255;       /* #FFFFFF — primary text / headings */
+  background-color: #121212;       /* page backdrop (overrides bg-teal-100/60) */
+}
+
+/* Surface depth ramp (neutral grays):
+     L0 page backdrop  → #121212  (darkest)
+     L1 surface/cards  → #1E1E1E
+     L2 cards/controls → #252525  (lightest) */
+.theme-dark .bg-slate-50,
+.theme-dark .bg-slate-50\/70,
+.theme-dark .bg-slate-50\/60,
+.theme-dark .bg-teal-100\/60 { background-color: #121212; }   /* L0 */
+.theme-dark .bg-white { background-color: #1e1e1e; }          /* L1 */
+.theme-dark .bg-slate-100 { background-color: #252525; }      /* L2 */
+.theme-dark .bg-teal-50\/50 { background-color: #1a1a1a; }
+
+/* Quick Actions colourful light-mode hover → quiet royal-blue wash in dark. */
+.theme-dark .quick-action-card:hover,
+.theme-dark .quick-action-card:focus-visible {
+  background-color: #1e1e1e;
+  background-image: linear-gradient(135deg, rgba(13, 148, 136, 0.28), rgba(15, 118, 110, 0.42));
+  --tw-ring-color: rgba(45, 212, 191, 0.35);
+}
+
+.theme-dark .quick-action-card:hover > span:first-child,
+.theme-dark .quick-action-card:focus-visible > span:first-child {
+  background-color: rgba(18, 18, 18, 0.55);
+  color: #5eead4;
+}
+
+.theme-dark .quick-action-card:hover > span:last-child,
+.theme-dark .quick-action-card:focus-visible > span:last-child {
+  color: #d4d4d8;
+}
+
+/* Text → white headings, neutral-gray scale, #A1A1AA secondary */
+.theme-dark .text-slate-900,
+.theme-dark .text-slate-800 { color: #ffffff; }   /* headings, stat numbers, names */
+.theme-dark .text-slate-700 { color: #e4e4e7; }
+.theme-dark .text-slate-600 { color: #d4d4d8; }
+.theme-dark .text-slate-500,
+.theme-dark .text-slate-400 { color: #a1a1aa; }   /* secondary text */
+
+/* Borders → medium gray #333333 */
+.theme-dark .border-slate-50,
+.theme-dark .border-slate-100,
+.theme-dark .border-slate-200 { border-color: #333333; }
+.theme-dark .border-slate-300 { border-color: #3f3f46; }
+.theme-dark .divide-slate-50 > :not([hidden]) ~ :not([hidden]) { border-color: #2a2a2a; }
+
+/* Card outline rings (ring-1 ring-slate-100/200) → medium-gray edge */
+.theme-dark .ring-slate-100,
+.theme-dark .ring-slate-200 { --tw-ring-color: #333333; }
+.theme-dark .ring-teal-100,
+.theme-dark .ring-blue-100 { --tw-ring-color: rgba(45, 212, 191, 0.25); }
+.theme-dark .ring-green-100 { --tw-ring-color: rgba(34, 197, 94, 0.25); }
+.theme-dark .ring-orange-100 { --tw-ring-color: rgba(245, 158, 11, 0.25); }
+
+/* Status badge surfaces → translucent palette hues (error/warning/success/info).
+   Teal+blue accents map to the royal-blue primary. */
+.theme-dark .bg-red-50 { background-color: rgba(239, 68, 68, 0.12); }
+.theme-dark .bg-red-100 { background-color: rgba(239, 68, 68, 0.18); }
+.theme-dark .bg-amber-50,
+.theme-dark .bg-amber-50\/70 { background-color: rgba(245, 158, 11, 0.12); }
+.theme-dark .bg-amber-100 { background-color: rgba(245, 158, 11, 0.18); }
+.theme-dark .bg-green-50 { background-color: rgba(34, 197, 94, 0.12); }
+.theme-dark .bg-green-100 { background-color: rgba(34, 197, 94, 0.18); }
+.theme-dark .bg-emerald-50,
+.theme-dark .bg-emerald-50\/60 { background-color: rgba(34, 197, 94, 0.12); }
+.theme-dark .bg-emerald-100 { background-color: rgba(34, 197, 94, 0.18); }
+.theme-dark .bg-orange-50 { background-color: rgba(245, 158, 11, 0.12); }
+.theme-dark .bg-orange-100 { background-color: rgba(245, 158, 11, 0.18); }
+.theme-dark .bg-rose-50 { background-color: rgba(244, 63, 94, 0.12); }
+.theme-dark .bg-rose-100 { background-color: rgba(244, 63, 94, 0.18); }
+.theme-dark .bg-blue-50 { background-color: rgba(45, 212, 191, 0.12); }
+.theme-dark .bg-blue-100 { background-color: rgba(45, 212, 191, 0.18); }
+.theme-dark .bg-teal-50 { background-color: rgba(45, 212, 191, 0.12); }
+.theme-dark .bg-teal-100 { background-color: rgba(45, 212, 191, 0.18); }
+.theme-dark .bg-purple-50 { background-color: rgba(192, 132, 252, 0.12); }
+.theme-dark .bg-purple-100 { background-color: rgba(192, 132, 252, 0.18); }
+
+/* Slash-opacity tint variants (StatCard tones, vitals flag cards). */
+.theme-dark .bg-blue-50\/50 { background-color: rgba(45, 212, 191, 0.12); }
+.theme-dark .bg-teal-50\/50 { background-color: rgba(45, 212, 191, 0.12); }
+.theme-dark .bg-green-50\/50,
+.theme-dark .bg-green-50\/40 { background-color: rgba(34, 197, 94, 0.12); }
+.theme-dark .bg-emerald-50\/60 { background-color: rgba(34, 197, 94, 0.12); }
+.theme-dark .bg-orange-50\/50 { background-color: rgba(245, 158, 11, 0.12); }
+.theme-dark .bg-purple-50\/50 { background-color: rgba(192, 132, 252, 0.12); }
+.theme-dark .bg-amber-50\/50,
+.theme-dark .bg-amber-50\/70 { background-color: rgba(245, 158, 11, 0.12); }
+.theme-dark .bg-red-50\/50 { background-color: rgba(239, 68, 68, 0.12); }
+.theme-dark .bg-red-100\/70 { background-color: rgba(239, 68, 68, 0.18); }
+
+/* -200 chip tints (critical vitals chip, "On Leave"/"Inactive" status badges) */
+.theme-dark .bg-red-200 { background-color: rgba(239, 68, 68, 0.24); }
+.theme-dark .bg-amber-200 { background-color: rgba(245, 158, 11, 0.24); }
+.theme-dark .bg-slate-200 { background-color: #3f3f46; }
+/* Decorative glow blobs behind quick-action tiles */
+.theme-dark .bg-teal-200,
+.theme-dark .bg-blue-200 { background-color: rgba(45, 212, 191, 0.30); }
+.theme-dark .bg-green-200 { background-color: rgba(34, 197, 94, 0.30); }
+.theme-dark .bg-orange-200 { background-color: rgba(245, 158, 11, 0.30); }
+
+/* Status badge text → palette hues. Teal/blue accents → light-blue secondary. */
+.theme-dark .text-red-700,
+.theme-dark .text-red-600,
+.theme-dark .text-red-500 { color: #ef4444; }    /* error */
+.theme-dark .text-amber-700,
+.theme-dark .text-amber-600 { color: #f59e0b; }   /* warning */
+.theme-dark .text-orange-600,
+.theme-dark .text-orange-500 { color: #f59e0b; }
+.theme-dark .text-green-700,
+.theme-dark .text-green-600 { color: #22c55e; }   /* success */
+.theme-dark .text-emerald-600 { color: #22c55e; }
+.theme-dark .text-rose-500 { color: #fb7185; }
+.theme-dark .text-blue-700 { color: #2dd4bf; }
+.theme-dark .text-teal-700,
+.theme-dark .text-teal-600,
+.theme-dark .text-teal-500 { color: #2dd4bf; }
+.theme-dark .text-purple-600 { color: #c084fc; }
+
+/* Status badge borders */
+.theme-dark .border-red-100,
+.theme-dark .border-red-200,
+.theme-dark .border-red-300 { border-color: rgba(239, 68, 68, 0.30); }
+.theme-dark .border-amber-200,
+.theme-dark .border-amber-300 { border-color: rgba(245, 158, 11, 0.30); }
+.theme-dark .border-emerald-100,
+.theme-dark .border-emerald-200 { border-color: rgba(34, 197, 94, 0.30); }
+.theme-dark .border-rose-200 { border-color: rgba(244, 63, 94, 0.30); }
+/* Tinted StatCard outlines (border-*-100) → translucent so they don't glow */
+.theme-dark .border-teal-100,
+.theme-dark .border-blue-100 { border-color: rgba(45, 212, 191, 0.25); }
+.theme-dark .border-green-100 { border-color: rgba(34, 197, 94, 0.25); }
+.theme-dark .border-orange-100 { border-color: rgba(245, 158, 11, 0.25); }
+.theme-dark .border-purple-100 { border-color: rgba(192, 132, 252, 0.25); }
+.theme-dark .border-teal-200,
+.theme-dark .border-teal-300 { border-color: rgba(45, 212, 191, 0.30); }
+.theme-dark .border-green-200 { border-color: rgba(34, 197, 94, 0.30); }
+.theme-dark .border-orange-200,
+.theme-dark .border-orange-300 { border-color: rgba(245, 158, 11, 0.30); }
+
+/* Light gradient panels (e.g. the delay-modal header from-amber-50→to-orange-50)
+   → muted warm tint so they don't read as a bright bar on the dark modal. */
+.theme-dark .from-amber-50 {
+  --tw-gradient-from: rgba(120, 53, 15, 0.40) var(--tw-gradient-from-position);
+  --tw-gradient-to: rgba(120, 53, 15, 0) var(--tw-gradient-to-position);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+.theme-dark .to-orange-50 { --tw-gradient-to: rgba(124, 45, 18, 0.30) var(--tw-gradient-to-position); }
+
+/* Decorative gradient cards (vitals stat tiles + panel headers use
+   `from-*-50 to-white`). Remap the stops so a subtle tint fades into the dark
+   card surface instead of a bright wash. `to-white` is listed last so it wins
+   the shared --tw-gradient-to that the from-* rules also set. */
+.theme-dark .from-blue-50 { --tw-gradient-from: rgba(45, 212, 191, 0.16) var(--tw-gradient-from-position); --tw-gradient-to: rgba(45, 212, 191, 0) var(--tw-gradient-to-position); --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to); }
+.theme-dark .from-red-50 { --tw-gradient-from: rgba(239, 68, 68, 0.16) var(--tw-gradient-from-position); --tw-gradient-to: rgba(239, 68, 68, 0) var(--tw-gradient-to-position); --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to); }
+.theme-dark .from-emerald-50 { --tw-gradient-from: rgba(34, 197, 94, 0.16) var(--tw-gradient-from-position); --tw-gradient-to: rgba(34, 197, 94, 0) var(--tw-gradient-to-position); --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to); }
+.theme-dark .from-purple-50 { --tw-gradient-from: rgba(192, 132, 252, 0.16) var(--tw-gradient-from-position); --tw-gradient-to: rgba(192, 132, 252, 0) var(--tw-gradient-to-position); --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to); }
+.theme-dark .from-rose-50 { --tw-gradient-from: rgba(244, 63, 94, 0.16) var(--tw-gradient-from-position); --tw-gradient-to: rgba(244, 63, 94, 0) var(--tw-gradient-to-position); --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to); }
+.theme-dark .to-white { --tw-gradient-to: #1e1e1e var(--tw-gradient-to-position); }
+.theme-dark .from-teal-50\/60 {
+  --tw-gradient-from: rgba(45, 212, 191, 0.10) var(--tw-gradient-from-position);
+  --tw-gradient-to: rgba(45, 212, 191, 0) var(--tw-gradient-to-position);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+
+/* Hover / focus backgrounds. These compile to a different selector than the
+   base utility (`.hover\:bg-x:hover`), so the surface overrides above don't
+   reach them — without these, hovering flashes the original near-white colour.
+   Neutral states lift subtly; tinted states become translucent. */
+.theme-dark .hover\:bg-slate-50:hover,
+.theme-dark .hover\:bg-slate-50\/70:hover,
+.theme-dark .hover\:bg-slate-50\/60:hover { background-color: rgba(255, 255, 255, 0.06); }
+.theme-dark .hover\:bg-slate-100:hover { background-color: rgba(255, 255, 255, 0.10); }
+.theme-dark .hover\:bg-white:hover { background-color: rgba(255, 255, 255, 0.08); }
+.theme-dark .focus\:bg-white:focus,
+.theme-dark .focus-within\:bg-white:focus-within { background-color: #252525; }
+.theme-dark .hover\:bg-red-50:hover { background-color: rgba(239, 68, 68, 0.18); }
+.theme-dark .hover\:bg-rose-50:hover { background-color: rgba(244, 63, 94, 0.18); }
+.theme-dark .hover\:bg-amber-50:hover { background-color: rgba(245, 158, 11, 0.18); }
+.theme-dark .hover\:bg-amber-200:hover { background-color: rgba(245, 158, 11, 0.30); }
+.theme-dark .hover\:bg-teal-50:hover,
+.theme-dark .hover\:bg-blue-50:hover { background-color: rgba(45, 212, 191, 0.18); }
+.theme-dark .hover\:bg-blue-100:hover { background-color: rgba(45, 212, 191, 0.24); }
+
+/* Solid CTA that sits on a coloured hero (Queue "Call Next / Complete"). The
+   global bg-white/​hover overrides would darken it into the teal banner and it
+   vanishes on hover — keep it a light pill with teal text instead. Placed after
+   the hover rules so it wins the same-specificity tie. */
+.theme-dark .hero-cta { background-color: #f8fafc; color: #0f766e; }
+.theme-dark .hero-cta:hover { background-color: #ffffff; }
+
+/* Console sidebar (patient rail is bg-white) → dark neutral grey in dark mode,
+   one step below the surface so it reads as a distinct rail. Placed after the
+   bg-white rule so it wins the same-specificity tie. */
+.theme-dark .console-sidebar { background-color: #1a1a1a; border-color: #333333; }
+
+/* Form inputs */
+.theme-dark .field-input {
+  background-color: #252525;
+  border-color: #333333;
+  color: #e4e4e7;
+}
+.theme-dark .field-input::placeholder { color: #71717a; }
+
+/* Animated sidebar collapse toggle (topbar): the concentric ring swaps colour
+   and the arrow glyph slides on hover. Adapted from the supplied design — themed
+   (teal accent) and sized to 44px so it fits the topbar. */
+.sidebar-toggle {
+  display: block;
+  position: relative;
+  width: 44px;
+  height: 44px;
+  margin: 0;
+  overflow: hidden;
+  outline: none;
+  background-color: transparent;
+  cursor: pointer;
+  border: 0;
+}
+.sidebar-toggle::before,
+.sidebar-toggle::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  inset: 6px;
+}
+.sidebar-toggle::before {
+  border: 3px solid #e2e8f0;
+  transition: opacity 0.4s cubic-bezier(0.77, 0, 0.175, 1) 80ms,
+    transform 0.5s cubic-bezier(0.455, 0.03, 0.515, 0.955) 80ms;
+}
+.sidebar-toggle::after {
+  border: 3px solid #5eead4;
+  transform: scale(1.3);
+  opacity: 0;
+  transition: opacity 0.4s cubic-bezier(0.165, 0.84, 0.44, 1),
+    transform 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+.sidebar-toggle:hover::before,
+.sidebar-toggle:focus::before {
+  opacity: 0;
+  transform: scale(0.7);
+  transition: opacity 0.4s cubic-bezier(0.165, 0.84, 0.44, 1),
+    transform 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+.sidebar-toggle:hover::after,
+.sidebar-toggle:focus::after {
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity 0.4s cubic-bezier(0.77, 0, 0.175, 1) 80ms,
+    transform 0.5s cubic-bezier(0.455, 0.03, 0.515, 0.955) 80ms;
+}
+.sidebar-toggle-box {
+  display: flex;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+.sidebar-toggle-elem {
+  display: block;
+  width: 16px;
+  height: 16px;
+  margin: 14px;
+  transform: rotate(180deg);   /* arrow faces LEFT while sidebar is open */
+  fill: #475569;
+  transition: transform 0.3s ease;
+}
+/* Sidebar collapsed → arrow faces RIGHT (click to open) */
+.sidebar-toggle.is-collapsed .sidebar-toggle-elem { transform: rotate(0deg); }
+.sidebar-toggle-elem svg { display: block; width: 100%; height: 100%; }
+.sidebar-toggle:hover .sidebar-toggle-box,
+.sidebar-toggle:focus .sidebar-toggle-box {
+  transition: 0.4s;
+  transform: translateX(-44px);
+}
+/* Dark theme: light arrows, dark ring */
+.theme-dark .sidebar-toggle::before { border-color: #333333; }
+.theme-dark .sidebar-toggle-elem { fill: #e4e4e7; }
+
+/* "Book Now" sparkle button (UIverse-style): dark pill with a rotating dotted
+   glow, animated sparkle icon, and gradient text. Namespaced .sparkle-btn so it
+   can't collide; keyframes prefixed too. */
+.sparkle-btn {
+  --black-700: hsla(174 69% 18% / 1);   /* deep teal pill (brand) */
+  --border_radius: 9999px;
+  --transtion: 0.3s ease-in-out;
+  --offset: 2px;
+  cursor: pointer;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  transform-origin: center;
+  padding: 0.7rem 1.5rem;
+  background-color: transparent;
+  border: none;
+  border-radius: var(--border_radius);
+  transform: scale(calc(1 + (var(--active, 0) * 0.1)));
+  transition: transform var(--transtion);
+}
+.sparkle-btn::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%;
+  height: 100%;
+  background-color: var(--black-700);
+  border-radius: var(--border_radius);
+  box-shadow: inset 0 0.5px hsl(0, 0%, 100%), inset 0 -1px 2px 0 hsl(0, 0%, 0%),
+    0px 4px 10px -4px hsla(0 0% 0% / calc(1 - var(--active, 0))),
+    0 0 0 calc(var(--active, 0) * 0.375rem) hsl(173 80% 40% / 0.75);
+  transition: all var(--transtion);
+  z-index: 0;
+}
+.sparkle-btn::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%;
+  height: 100%;
+  background-color: hsla(173 80% 42% / 0.85);
+  background-image: radial-gradient(at 51% 89%, hsla(160, 60%, 68%, 1) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, hsla(173, 58%, 45%, 1) 0px, transparent 50%),
+    radial-gradient(at 22% 91%, hsla(168, 55%, 52%, 1) 0px, transparent 50%);
+  background-position: top;
+  opacity: var(--active, 0);
+  border-radius: var(--border_radius);
+  transition: opacity var(--transtion);
+  z-index: 2;
+}
+.sparkle-btn:is(:hover, :focus-visible) { --active: 1; }
+.sparkle-btn:active { transform: scale(1); }
+.sparkle-btn .dots_border {
+  --size_border: 100%;              /* light: shine sweeps over the dark pill */
+  overflow: hidden;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: var(--size_border);
+  height: var(--size_border);
+  background-color: transparent;
+  border-radius: var(--border_radius);
+  z-index: 1;
+}
+/* Dark surface: original rotating border glow (protrudes onto the dark page). */
+.theme-dark .sparkle-btn .dots_border { --size_border: calc(100% + 5px); z-index: -10; }
+.sparkle-btn .dots_border::before {
+  content: "";
+  position: absolute;
+  top: 30%;
+  left: 50%;
+  transform-origin: left;
+  transform: rotate(0deg);
+  width: 100%;
+  height: 2rem;
+  background-color: white;
+  mask: linear-gradient(transparent 0%, white 120%);
+  -webkit-mask: linear-gradient(transparent 0%, white 120%);
+  animation: sparkle-rotate 2s linear infinite;
+}
+@keyframes sparkle-rotate { to { transform: rotate(360deg); } }
+.sparkle-btn .sparkle { position: relative; z-index: 10; width: 1.4rem; }
+.sparkle-btn .sparkle .path {
+  fill: currentColor;
+  stroke: currentColor;
+  transform-origin: center;
+  color: hsl(0, 0%, 100%);
+}
+.sparkle-btn:is(:hover, :focus) .sparkle .path { animation: sparkle-path 1.5s linear 0.5s infinite; }
+.sparkle-btn .sparkle .path:nth-child(1) { --scale_path_1: 1.2; }
+.sparkle-btn .sparkle .path:nth-child(2) { --scale_path_2: 1.2; }
+.sparkle-btn .sparkle .path:nth-child(3) { --scale_path_3: 1.2; }
+@keyframes sparkle-path {
+  0%, 34%, 71%, 100% { transform: scale(1); }
+  17% { transform: scale(var(--scale_path_1, 1)); }
+  49% { transform: scale(var(--scale_path_2, 1)); }
+  83% { transform: scale(var(--scale_path_3, 1)); }
+}
+.sparkle-btn .text_button {
+  position: relative;
+  z-index: 10;
+  background-image: linear-gradient(90deg, hsla(0 0% 100% / 1) 0%, hsla(0 0% 100% / var(--active, 0)) 120%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: transparent;
+}
+
+/* 3D tilt-on-hover for the patient KPI cards. Six transparent hover zones tilt
+   the card toward the cursor quadrant (namespaced .kpi-tilt so the generic
+   button/.hover selectors don't leak). Zones sit on top and bubble clicks to the
+   wrapping link, so navigation still works. */
+.kpi-tilt { position: relative; display: block; perspective: 800px; transition: transform 0.3s ease; }
+.kpi-tilt:active { transform: scale(0.97); }
+.kpi-tilt .kz { position: absolute; z-index: 5; width: 33.34%; height: 50%; }
+.kpi-tilt .kz1 { top: 0; left: 0; }
+.kpi-tilt .kz2 { top: 0; left: 33.33%; }
+.kpi-tilt .kz3 { top: 0; right: 0; }
+.kpi-tilt .kz4 { bottom: 0; left: 0; }
+.kpi-tilt .kz5 { bottom: 0; left: 33.33%; }
+.kpi-tilt .kz6 { bottom: 0; right: 0; }
+.kpi-tilt-target {
+  height: 100%;
+  transition: transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
+}
+.kpi-tilt .kz1:hover ~ .kpi-tilt-target { transform: rotateX(10deg) rotateY(-10deg); box-shadow: -5px -5px 16px rgba(15, 23, 42, 0.16); }
+.kpi-tilt .kz3:hover ~ .kpi-tilt-target { transform: rotateX(10deg) rotateY(10deg); box-shadow: 5px -5px 16px rgba(15, 23, 42, 0.16); }
+.kpi-tilt .kz4:hover ~ .kpi-tilt-target { transform: rotateX(-10deg) rotateY(-10deg); box-shadow: -5px 5px 16px rgba(15, 23, 42, 0.16); }
+.kpi-tilt .kz6:hover ~ .kpi-tilt-target { transform: rotateX(-10deg) rotateY(10deg); box-shadow: 5px 5px 16px rgba(15, 23, 42, 0.16); }
+.kpi-tilt .kz2:hover ~ .kpi-tilt-target { transform: rotateX(10deg); box-shadow: 0 -5px 16px rgba(15, 23, 42, 0.16); }
+.kpi-tilt .kz5:hover ~ .kpi-tilt-target { transform: rotateX(-10deg); box-shadow: 0 5px 16px rgba(15, 23, 42, 0.16); }
+
+/* Live Smart OP Queue card — a slowly rotating teal glow border (in the spirit
+   of the sparkle button's spinning border) to signal it's "live". The card sits
+   above the spinning conic gradient; only the 2px padding ring shows it. */
+.queue-glow {
+  position: relative;
+  display: flex;
+  padding: 3px;                 /* thickness of the moving line */
+  border-radius: 1.6rem;
+  overflow: hidden;
+  isolation: isolate;
+  background-color: #ffffff;    /* ring base = card colour, so no hard outline where the sweep isn't */
+}
+.theme-dark .queue-glow { background-color: #1e1e1e; }
+/* teal-50 ring is near-white → shows as a white border in dark; drop it (the
+   moving green line is the border). */
+.theme-dark .ring-teal-50 { --tw-ring-color: transparent; }
+.queue-glow::before {
+  content: "";
+  position: absolute;
+  inset: -60%;
+  z-index: 0;
+  background: conic-gradient(from 0deg, transparent 0deg 225deg, #5eead4 290deg, #2dd4bf 340deg, #5eead4 360deg);
+  animation: queue-spin 4.5s linear infinite;
+}
+.queue-glow > * { position: relative; z-index: 1; flex: 1; }
+@keyframes queue-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .queue-glow::before { animation: none; } }
+
+/* Gentle pulse on the Smart OP Queue "now serving" number. */
+@keyframes token-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.06); opacity: 0.85; }
+}
+.animate-token-pulse { display: inline-block; animation: token-pulse 2.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .animate-token-pulse { animation: none; } }
+
+/* Print: show only the patient UHID card (the "Print card" button). */
+@media print {
+  body * { visibility: hidden; }
+  .print-card, .print-card * { visibility: visible; }
+  .print-card {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 320px; box-shadow: none !important;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+}
+
+/* ── Clinic sidebar "glider" nav effect ──────────────────────────────────
+   Adapted from a radio-input glider: the vertical bar + yellow glow slide to
+   the active nav item. Position is driven by an inline translateY (active
+   route index) instead of :checked, so it works with react-router NavLink. */
+.radio-container {
+  --main-color: #f7e479;
+  --main-color-opacity: #f7e4791c;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  padding-left: 0.5rem;
+}
+.radio-container .glider-container {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(27, 27, 27, 1) 50%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  width: 1px;
+}
+.radio-container .glider-container .glider {
+  position: relative;
+  height: calc(100% / var(--total-radio));
+  width: 100%;
+  background: linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0) 0%,
+    var(--main-color) 50%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  transition: transform 0.5s cubic-bezier(0.37, 1.95, 0.66, 0.56);
+}
+.radio-container .glider-container .glider::before {
+  content: "";
+  position: absolute;
+  height: 60%;
+  width: 300%;
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--main-color);
+  filter: blur(10px);
+}
+.radio-container .glider-container .glider::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  height: 100%;
+  width: 150px;
+  background: linear-gradient(
+    90deg,
+    var(--main-color-opacity) 0%,
+    rgba(0, 0, 0, 0) 100%
+  );
+}
+.radio-container .nav-item {
+  cursor: pointer;
+  padding: 0.85rem 1rem;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #9aa4b2;
+  transition: color 0.3s ease-in-out;
+}
+.radio-container .nav-item:hover {
+  color: #e2e8f0;
+}
+.radio-container .nav-item.active {
+  color: var(--main-color);
+}
+
+/* ============================================================================
+   LANDING RE-SKIN — "sweet-looker" editorial LAYOUT tuned to the TapCure BRAND
+   (teal primary + navy ink + green/amber accents + Instrument Serif headings).
+   Scoped to the landing shell only via `.theme-editorial` (see LandingPage.jsx),
+   using the same scoped-override technique as `.theme-reception`/`.theme-dark`,
+   so no console outside the landing page is affected.
+   ========================================================================== */
+
+/* 1 — Brand tokens remapped to the teal/brand palette (RGB channels consumed by
+       tailwind.config `brand.*`). Colours the "past" <JourneySection /> so it
+       matches the teal sweet-looker tokens above. */
+.theme-editorial {
+  --brand-blue: 13 148 136;        /* teal-600 — primary actions/links */
+  --brand-blueDark: 15 118 110;    /* teal-700 — hover */
+  --brand-blueLight: 240 253 250;  /* teal-50  — tinted surfaces */
+  --brand-teal: 13 148 136;        /* teal-600 */
+  --brand-green: 22 163 74;        /* green-600 — alternating step accent */
+  --brand-greenLight: 236 253 245; /* green-50 — tinted surfaces */
+  --brand-navy: 15 39 66;          /* brand navy — headings / body text */
+}
+
+/* 2 — Dashboard typography: Inter everywhere (no serif), upright (no italics).
+       Remap every `font-serif` usage on the landing to Inter, give headings a
+       bold weight, and force all `<em>` / `.italic` text upright. Scoped rules
+       (0,2,0 / 0,1,1) beat the utility classes they override. */
+.theme-editorial .font-serif {
+  font-family: 'Inter', system-ui, sans-serif;
+}
+.theme-editorial h1,
+.theme-editorial h2,
+.theme-editorial h3 {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+.theme-editorial em,
+.theme-editorial .italic {
+  font-style: normal;
+}
+
+/* Teal→green gradient text for highlighted words (matches the hero accent). */
+.theme-editorial .grad-text {
+  background-image: linear-gradient(90deg, #0d9488, #16a34a);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* 3 — Softer card shadows. */
+.theme-editorial .shadow-card {
+  box-shadow: 0 1px 2px rgba(15, 39, 66, 0.04), 0 10px 30px rgba(15, 39, 66, 0.06);
+}
+.theme-editorial .shadow-cardHover {
+  box-shadow: 0 2px 6px rgba(15, 39, 66, 0.06), 0 22px 50px rgba(15, 39, 66, 0.12);
+}
+
+/* 4 — Literal blue tint surfaces in the JourneySection fee panel → teal tints,
+       so nothing reads as the old royal-blue. */
+.theme-editorial .bg-blue-50\/50 { background-color: rgba(204, 251, 241, 0.5); }
+.theme-editorial .border-blue-100 { border-color: #99f6e4; }
+.theme-editorial .text-blue-100 { color: #ccfbf1; }
+
+/* 5 — Subtle paper grain over the page (sits behind all content). */
+.editorial-grain::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: radial-gradient(rgba(15, 39, 66, 0.045) 1px, transparent 1px);
+  background-size: 3px 3px;
+  mix-blend-mode: multiply;
+  opacity: 0.3;
+}

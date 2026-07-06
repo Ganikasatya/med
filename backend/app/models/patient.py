@@ -15,7 +15,7 @@ from datetime import date, datetime
 from typing import Optional
 
 from sqlalchemy import (
-    Boolean, Date, DateTime, ForeignKey, String, Text, UniqueConstraint,
+    Boolean, Date, DateTime, ForeignKey, Numeric, String, Text, UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -33,15 +33,25 @@ class Patient(Base):
     __table_args__ = (UniqueConstraint("hospital_id", "phone", name="uq_patient_hospital_phone"),)
 
     patient_id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
+    # Human-facing lifetime identifier (e.g. "DM-7F3K9Q2"). Globally unique,
+    # generated once at creation. See services/uhid.py. Nullable at the DB level
+    # only so the column could be backfilled onto existing rows.
+    uhid: Mapped[Optional[str]] = mapped_column(String(20), unique=True, index=True)
     hospital_id: Mapped[int] = mapped_column(BigIntPK, ForeignKey("hospitals.hospital_id"), nullable=False, index=True)
     user_id: Mapped[Optional[int]] = mapped_column(BigIntPK, ForeignKey("users.user_id"), index=True)
     name: Mapped[str] = mapped_column(String(150), nullable=False)
     phone: Mapped[str] = mapped_column(String(15), nullable=False, index=True)
     email: Mapped[Optional[str]] = mapped_column(String(100))
+    # ABHA (Ayushman Bharat Health Account) — optional now, will become the
+    # national health identifier going forward. abha_number is the 14-digit ID
+    # (stored digits-only); abha_address is the PHR handle (e.g. name@abdm).
+    abha_number: Mapped[Optional[str]] = mapped_column(String(17), index=True)
+    abha_address: Mapped[Optional[str]] = mapped_column(String(64))
     dob: Mapped[Optional[date]] = mapped_column(Date)
     age: Mapped[Optional[int]] = mapped_column()
     gender: Mapped[Optional[str]] = mapped_column(String(8))
     blood_group: Mapped[Optional[str]] = mapped_column(String(5))
+    photo_url: Mapped[Optional[str]] = mapped_column(String(500))   # profile photo (uploaded)
     address: Mapped[str] = mapped_column(Text, default="")
     city: Mapped[str] = mapped_column(String(100), default="")
     pincode: Mapped[str] = mapped_column(String(10), default="")
@@ -63,6 +73,9 @@ class Patient(Base):
         back_populates="patient", cascade="all, delete-orphan"
     )
     documents: Mapped[list["PatientDocument"]] = relationship(
+        back_populates="patient", cascade="all, delete-orphan"
+    )
+    vitals: Mapped[list["PatientVital"]] = relationship(
         back_populates="patient", cascade="all, delete-orphan"
     )
 
@@ -115,6 +128,34 @@ class Allergy(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     patient: Mapped["Patient"] = relationship(back_populates="allergies")
+
+
+class PatientVital(Base):
+    """A single set of vitals captured for a patient (usually by the nurse /
+    reception at check-in, tied to that day's visit). Stored over time so the
+    doctor can see trends. All measures optional — staff record what they took."""
+    __tablename__ = "patient_vitals"
+
+    vital_id: Mapped[int] = mapped_column(BigIntPK, primary_key=True, autoincrement=True)
+    patient_id: Mapped[int] = mapped_column(BigIntPK, ForeignKey("patients.patient_id"), nullable=False, index=True)
+    appointment_id: Mapped[Optional[int]] = mapped_column(BigIntPK, ForeignKey("appointments.appointment_id"), index=True)
+    # Set when this reading is for a dependent booked under the patient's account.
+    family_member_id: Mapped[Optional[int]] = mapped_column(BigIntPK, ForeignKey("family_members.member_id"), index=True)
+    bp_systolic: Mapped[Optional[int]] = mapped_column()        # mmHg (upper)
+    bp_diastolic: Mapped[Optional[int]] = mapped_column()       # mmHg (lower)
+    pulse: Mapped[Optional[int]] = mapped_column()              # bpm
+    temperature_f: Mapped[Optional[float]] = mapped_column(Numeric(4, 1))  # °F
+    spo2: Mapped[Optional[int]] = mapped_column()              # %
+    respiratory_rate: Mapped[Optional[int]] = mapped_column()  # breaths/min
+    weight_kg: Mapped[Optional[float]] = mapped_column(Numeric(5, 1))
+    height_cm: Mapped[Optional[float]] = mapped_column(Numeric(5, 1))
+    blood_sugar: Mapped[Optional[int]] = mapped_column()        # mg/dL
+    sugar_type: Mapped[Optional[str]] = mapped_column(String(10))  # fasting/random/pp
+    notes: Mapped[str] = mapped_column(Text, default="")
+    recorded_by: Mapped[Optional[int]] = mapped_column(BigIntPK, ForeignKey("users.user_id"))
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+    patient: Mapped["Patient"] = relationship(back_populates="vitals")
 
 
 class PatientDocument(Base):

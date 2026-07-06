@@ -7,7 +7,6 @@
  */
 export const PATIENT_NAV = [
   { label: 'Dashboard', tKey: 'pnav.dashboard', to: '', icon: 'Home', end: true },
-  { label: 'Book by Voice', tKey: 'vbook.navTitle', to: 'appointments/voice', icon: 'Mic' },
   { label: 'My Appointments', tKey: 'pnav.appointments', to: 'appointments', icon: 'CalendarDays' },
   { label: 'Doctors', tKey: 'pnav.doctors', to: 'doctors', icon: 'UserRound' },
   { label: 'Clinics', tKey: 'pnav.clinics', to: 'clinics', icon: 'Building2' },

@@ -17,8 +17,8 @@ from ..database import get_db, utcnow
 from ..deps import ensure_same_tenant, require_permission
 from ..rbac import ROLE_PATIENT, is_clinic_staff
 from ..models import (
-    Appointment, Doctor, EmergencyQueue, Patient, Token, TokenMovementLog,
-    TokenStatusHistory, User,
+    Appointment, Doctor, EmergencyQueue, FamilyMember, Patient, PatientVital, Token,
+    TokenMovementLog, TokenStatusHistory, User,
 )
 from ..schemas.token import (
     BulkCancelRequest, CancelTokenRequest, EmergencyCreate, EmergencyOut,
@@ -28,6 +28,7 @@ from ..schemas.token import (
 )
 from ..services import audit
 from ..services import notifications as notify
+from ..services import vitals as vitals_service
 from ..services import token_engine as te
 
 
@@ -71,8 +72,42 @@ def _out_with_patient(db: Session, t: Token) -> dict:
     data = _out(t).model_dump()
     p = db.get(Patient, t.patient_id) if t.patient_id else None
     data["patient_name"] = p.name if p else None
+    data["patient_uhid"] = p.uhid if p else None
     data["patient_age"] = p.age if p else None
     data["patient_gender"] = p.gender if p else None
+    # Consultation-fee payment status (collected at the clinic) — drives the
+    # "Collect ₹X" / "Paid" UI and the call-next gate.
+    appt = db.get(Appointment, t.appointment_id) if t.appointment_id else None
+    data["consultation_paid"] = bool(appt.consultation_paid) if appt else True
+    data["consultation_fee"] = float(appt.consultation_fee) if appt else 0
+    # If the visit is for a dependent, surface their name so the queue shows who
+    # is actually being seen (not just the account holder).
+    data["family_member_id"] = appt.family_member_id if appt else None
+    data["family_member_name"] = None
+    if appt and appt.family_member_id:
+        fm = db.get(FamilyMember, appt.family_member_id)
+        data["family_member_name"] = fm.name if fm else None
+    # Latest vitals (recorded at check-in) — a compact summary so the queue card
+    # can show them straight away and flag if anything is abnormal.
+    lv = db.scalar(
+        select(PatientVital).where(PatientVital.patient_id == t.patient_id)
+        .order_by(PatientVital.recorded_at.desc())
+    ) if t.patient_id else None
+    if lv:
+        ev = vitals_service.evaluate(lv)
+        data["latest_vitals"] = {
+            "bp": f"{lv.bp_systolic}/{lv.bp_diastolic}" if (lv.bp_systolic or lv.bp_diastolic) else None,
+            "pulse": lv.pulse,
+            "temperature_f": float(lv.temperature_f) if lv.temperature_f is not None else None,
+            "spo2": lv.spo2,
+            "weight_kg": float(lv.weight_kg) if lv.weight_kg is not None else None,
+            "blood_sugar": lv.blood_sugar,
+            "bmi": ev["bmi"],
+            "abnormal": ev["abnormal"],
+            "recorded_at": lv.recorded_at.isoformat(),
+        }
+    else:
+        data["latest_vitals"] = None
     return data
 
 
@@ -242,14 +277,25 @@ def no_show_report(hospital_id: int | None = Query(None), date: str | None = Que
 def call_next(doctor_id: int = Query(...), affiliation_id: int | None = Query(None), me: User = Depends(require_permission("token", "manage")), db: Session = Depends(get_db)):
     doctor = _doctor(db, doctor_id, me)
     on_date = date_cls.today()
-    completed = None
     cur = te.current_token(db, doctor_id, on_date, affiliation_id)
+    waiting = te.waiting_tokens(db, doctor_id, on_date, affiliation_id)
+
+    # Call the next PAID patient. Anyone whose consultation fee is still pending is
+    # SKIPPED (not blocked) — they stay in the queue and get called once they pay.
+    def _is_paid(w) -> bool:
+        if not w.appointment_id:
+            return True
+        a = db.get(Appointment, w.appointment_id)
+        return (not a) or a.consultation_paid or float(a.consultation_fee or 0) <= 0
+
+    nxt = next((w for w in waiting if _is_paid(w)), None)
+    pending = sum(1 for w in waiting if not _is_paid(w))
+
+    completed = None
     if cur:
         te.finish_serving(db, cur, me.user_id)  # complete the in-progress one
         completed = cur
     te.recompute_positions(db, doctor_id, on_date, affiliation_id)
-    waiting = te.waiting_tokens(db, doctor_id, on_date, affiliation_id)
-    nxt = waiting[0] if waiting else None
     if nxt:
         te.start_serving(db, nxt, me.user_id)
         te.recompute_positions(db, doctor_id, on_date, affiliation_id)
@@ -258,10 +304,17 @@ def call_next(doctor_id: int = Query(...), affiliation_id: int | None = Query(No
         db.refresh(completed)
     if nxt:
         db.refresh(nxt)
+    if nxt:
+        message = f"Called {nxt.display_code}" + (f" · {pending} skipped (payment pending)" if pending else "")
+    elif pending:
+        message = f"{pending} waiting, all with payment pending — collect to call them"
+    else:
+        message = "No more waiting tokens"
     return {
         "completed": _out(completed).model_dump() if completed else None,
         "current": _out(nxt).model_dump() if nxt else None,
-        "message": "Queue advanced" if nxt else "No more waiting tokens",
+        "skipped_pending": pending,
+        "message": message,
     }
 
 

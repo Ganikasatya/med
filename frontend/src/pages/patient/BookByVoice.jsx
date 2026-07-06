@@ -7,7 +7,7 @@ import {
 import { Card, PageHeading } from '../../components/clinic/ui.jsx'
 import { usePatientCtx } from '../../context/PatientContext.jsx'
 import { useI18n, LANGS } from '../../i18n/index.jsx'
-import { appointmentsApi, tokensApi } from '../../api'
+import { appointmentsApi, tokensApi, patientsApi } from '../../api'
 import { prettyTime, prettyDate, todayISO, clockIST } from '../../lib/format.js'
 import { speak, stopSpeaking, ttsSupported } from '../../lib/voice.js'
 import {
@@ -98,8 +98,18 @@ function BookByVoice() {
   const [slotTime, setSlotTime] = useState('')
   const [result, setResult] = useState(null) // { token_number, leave_by, doctorName }
   const [symptom, setSymptom] = useState('')
+  const [family, setFamily] = useState([])
+  const [bookingFor, setBookingFor] = useState('self')   // 'self' or family member_id
+
+  useEffect(() => {
+    if (!patient?.patient_id) return
+    patientsApi.family(patient.patient_id)
+      .then((r) => setFamily((r || []).filter((m) => m.is_active)))
+      .catch(() => setFamily([]))
+  }, [patient?.patient_id])
 
   const recRef = useRef(null)        // active MediaRecorder handle (cloud mode)
+  const autoStopRef = useRef(null)   // safety timer that stops recording on its own
   const originRef = useRef(null)     // {lat,lng} captured quietly for leave-by
 
   const bookableDoctors = useMemo(
@@ -140,6 +150,20 @@ function BookByVoice() {
     return () => stopSpeaking()
   }, [])
 
+  // Read the how-to instructions aloud for Telugu patients (many can't read the
+  // screen). Plays once shortly after the intro screen appears; replayable via
+  // the "Listen to instructions" button below.
+  const speakGuide = useCallback(() => {
+    stopSpeaking()
+    speak(t('vbook.guideSpoken'), speechCode('te'))
+  }, [t])
+
+  useEffect(() => {
+    if (lang !== 'te' || started) return undefined
+    const id = setTimeout(speakGuide, 600)
+    return () => clearTimeout(id)
+  }, [lang, started, speakGuide])
+
   // -- Speak a prompt in the chosen language. `speak()` prefers Cartesia and,
   //    for Telugu, never falls back to English/romanized browser narration.
   const say = useCallback(async (text) => {
@@ -148,38 +172,6 @@ function BookByVoice() {
     await speak(text, speechCode(lang))
     setPhase('idle')
   }, [lang])
-
-  // -- Capture one spoken reply, cloud (push-to-talk) or browser (auto-stop). --
-  const captureSpeech = useCallback(async () => {
-    stopSpeaking()
-    setHint('')
-    if (cloud && canRecord()) {
-      // Push-to-talk: first call starts, second call (via the same button) stops.
-      if (recRef.current) {
-        const blob = await recRef.current.stop()
-        recRef.current = null
-        setPhase('thinking')
-        try {
-          return await transcribe(blob, lang)
-        } catch {
-          return ''
-        }
-      }
-      try {
-        recRef.current = await startRecording()
-        setPhase('listening')
-        return null // signal: recording started, await the second tap
-      } catch {
-        setHint(t('vbook.micDenied'))
-        return ''
-      }
-    }
-    // Browser fallback: one-shot recognition that stops on its own.
-    setPhase('listening')
-    const text = await listenOnce(lang)
-    setPhase('thinking')
-    return text
-  }, [cloud, lang, t])
 
   // ---- Step handlers: each takes the transcript and advances the flow. ------
   const handleSymptom = useCallback(async (text) => {
@@ -318,16 +310,26 @@ function BookByVoice() {
   }, [slots, lang, date, doctorId, doctorsById, say, t])
 
   const doBooking = useCallback(async () => {
+    // Guard against missing selections so we never send a malformed booking that
+    // the backend rejects with a confusing error.
+    if (!patient?.patient_id || !doctorId || !date || !slotTime) {
+      setHint(t('vbook.bookFailed'))
+      setStep('confirm')
+      await say(t('vbook.confirmRetry'))
+      return
+    }
     setStep('booking')
     setPhase('thinking')
     await say(t('vbook.booking'))
     try {
       const origin = originRef.current
       const travelMin = origin ? travelMinutesBetween(origin, destination) : null
+      const resolvedAffiliation = affiliationId || affiliation?.affiliation_id
       const appt = await appointmentsApi.book({
         doctor_id: Number(doctorId),
-        affiliation_id: Number(affiliationId || affiliation?.affiliation_id),
+        affiliation_id: resolvedAffiliation ? Number(resolvedAffiliation) : null,
         patient_id: patient.patient_id,
+        family_member_id: bookingFor === 'self' ? null : Number(bookingFor),
         appointment_date: date,
         slot_time: slotTime,
         appointment_type: 'regular',
@@ -345,12 +347,14 @@ function BookByVoice() {
       setResult({ tokenNo, leaveBy, doctorName: doctorsById[doctorId]?.name || '' })
       setStep('done')
       await say(leaveBy ? t('vbook.doneSpoken', { token: tokenNo, leave: leaveBy }) : t('vbook.doneTitle'))
-    } catch {
-      setHint(t('vbook.bookFailed'))
+    } catch (e) {
+      // Surface the real reason (e.g. "Slot already booked") instead of a vague message.
+      console.error('Voice booking failed:', e)
+      setHint(e?.message || t('vbook.bookFailed'))
       setStep('confirm')
       await say(t('vbook.bookFailed'))
     }
-  }, [affiliation, affiliationId, doctorId, patient, date, slotTime, symptom, destination, doctorsById, say, t])
+  }, [affiliation, affiliationId, doctorId, patient, date, slotTime, symptom, destination, doctorsById, bookingFor, say, t])
 
   const handleConfirm = useCallback(async (text) => {
     const { value } = await interpretYesNo(text, lang)
@@ -362,7 +366,9 @@ function BookByVoice() {
       await say(t('vbook.askDoctor'))
       return
     }
+    // Unclear — re-ask instead of dead-ending so the user can simply say "yes".
     setHint(t('vbook.didntCatch'))
+    await say(t('vbook.confirmRetry'))
   }, [lang, doBooking, say, t])
 
   const dispatch = useCallback(async (text) => {
@@ -379,11 +385,44 @@ function BookByVoice() {
     if (step === 'confirm') return handleConfirm(text)
   }, [step, handleSymptom, handlePreference, handleParticular, handleLocation, handleDoctor, handleDate, handleSlot, handleConfirm, t])
 
-  // Mic button: in cloud push-to-talk mode the same button starts then stops.
-  const onMic = useCallback(async () => {
-    const text = await captureSpeech()
+  // Stop the active cloud recording, transcribe it, and advance the flow. Used
+  // by both the manual "tap to stop" and the auto-stop safety timer, so the
+  // reply is always sent even if the user only taps once.
+  const finishCapture = useCallback(async () => {
+    if (autoStopRef.current) { clearTimeout(autoStopRef.current); autoStopRef.current = null }
+    const rec = recRef.current
+    if (!rec) return
+    recRef.current = null
+    setPhase('thinking')
+    let text = ''
+    try { text = await transcribe(await rec.stop(), lang) } catch { text = '' }
     await dispatch(text)
-  }, [captureSpeech, dispatch])
+  }, [lang, dispatch])
+
+  // Mic button. Cloud mode: first tap starts recording and it auto-stops after a
+  // few seconds (tapping again stops sooner). Browser fallback is one-shot.
+  const onMic = useCallback(async () => {
+    if (recRef.current) return finishCapture() // already recording → stop now
+    stopSpeaking()
+    setHint('')
+    if (cloud && canRecord()) {
+      try {
+        recRef.current = await startRecording()
+        setPhase('listening')
+        // Safety net: stop and transcribe even if the user never taps again.
+        autoStopRef.current = setTimeout(() => { finishCapture() }, 7000)
+      } catch {
+        setHint(t('vbook.micDenied'))
+        setPhase('idle')
+      }
+      return
+    }
+    // Browser fallback: one-shot recognition that stops on its own.
+    setPhase('listening')
+    const text = await listenOnce(lang)
+    setPhase('thinking')
+    await dispatch(text)
+  }, [cloud, lang, t, finishCapture, dispatch])
 
   // Tapping an option is the always-available fallback to speaking.
   const pickPreference = (id) => async () => {
@@ -401,12 +440,15 @@ function BookByVoice() {
   }
 
   const begin = async () => {
+    stopSpeaking() // cut any intro narration before the first question
     setStarted(true)
     setStep('symptom')
     await say(t('vbook.askSymptom'))
   }
 
   const restart = () => {
+    if (autoStopRef.current) { clearTimeout(autoStopRef.current); autoStopRef.current = null }
+    recRef.current = null
     setStarted(false); setStep('symptom'); setHeard(''); setHint(''); setResult(null)
     setDoctorId(''); setAffiliationId(''); setDate(''); setSlots([]); setSlotTime(''); setDoctorShortlist([])
     setSymptomDoctors([]); setPreferredDoctors([]); setSelectedLocation(''); setSymptom('')
@@ -451,7 +493,7 @@ function BookByVoice() {
               <button
                 key={code}
                 type="button"
-                onClick={() => setLang(code)}
+                onClick={() => { stopSpeaking(); setLang(code) }}
                 className={`rounded-full px-3 py-1.5 text-[13px] font-bold transition-colors ${
                   lang === code ? 'bg-brand-blue text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
@@ -468,8 +510,9 @@ function BookByVoice() {
           </span>
         </div>
 
-        {/* Telugu voice usage instructions — shown only when Telugu is selected. */}
-        {lang === 'te' && (
+        {/* "How to book by voice" steps — always shown on the intro screen so
+            the user knows the process, and kept visible during the Telugu flow. */}
+        {(!started || (lang === 'te' && step !== 'done')) && (
           <div className="mb-5 rounded-2xl border border-brand-blue/15 bg-brand-blueLight/40 p-4">
             <p className="mb-2 flex items-center gap-2 text-[14px] font-extrabold text-brand-navy">
               <Info className="h-4 w-4 text-brand-blue" /> {t('vbook.guideTitle')}
@@ -480,6 +523,15 @@ function BookByVoice() {
               <li>{t('vbook.guideStep3')}</li>
               <li>{t('vbook.guideStep4')}</li>
             </ol>
+            {lang === 'te' && (
+              <button
+                type="button"
+                onClick={speakGuide}
+                className="mt-3 inline-flex items-center gap-2 rounded-xl bg-brand-blue px-4 py-2 text-[13px] font-bold text-white hover:bg-brand-blueDark"
+              >
+                <Volume2 className="h-4 w-4" /> {t('vbook.listenGuide')}
+              </button>
+            )}
           </div>
         )}
 
@@ -493,6 +545,23 @@ function BookByVoice() {
               <p className="text-[20px] font-extrabold text-brand-navy">{t('vbook.cardTitle')}</p>
               <p className="mt-1 text-[14px] text-slate-500">{t('vbook.cardSub')}</p>
             </div>
+            <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
+              <span className="font-semibold text-slate-500">{t('ppage.bookingFor')}:</span>
+              <select
+                value={bookingFor}
+                onChange={(e) => {
+                  if (e.target.value === '__add__') { navigate('/patient-dashboard/profile?addFamily=1'); return }
+                  setBookingFor(e.target.value)
+                }}
+                className="bg-transparent font-semibold text-brand-navy outline-none"
+              >
+                <option value="self">{t('ppage.myself')}</option>
+                {family.map((m) => (
+                  <option key={m.member_id} value={String(m.member_id)}>{m.name}{m.relation ? ` — ${m.relation}` : ''}</option>
+                ))}
+                <option value="__add__">{t('ppage.addFamilyMember')}</option>
+              </select>
+            </label>
             <button
               type="button"
               onClick={begin}

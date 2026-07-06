@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Search, UserPlus, RefreshCw, X, Phone, User, MapPin, Droplet, Calendar, ChevronLeft, ChevronRight, Filter, Eye } from 'lucide-react'
+import { Search, UserPlus, RefreshCw, X, Phone, User, MapPin, Droplet, Calendar, ChevronLeft, ChevronRight, Filter, Eye, Fingerprint } from 'lucide-react'
 import { Card, PageHeading, ToolButton, Avatar } from '../../components/clinic/ui.jsx'
 import { TextInput } from '../../components/common/FormControls.jsx'
 import AnimatedNumber from '../../components/common/AnimatedNumber.jsx'
+import PatientHistoryDrawer from '../../components/patient/PatientHistoryDrawer.jsx'
 import { patientsApi } from '../../api'
 import { useAuth } from '../../context/AuthContext.jsx'
 
@@ -24,7 +25,7 @@ function fmtDate(iso) {
 
 /* ---------------- Add Patient modal ---------------- */
 function AddPatientModal({ hospitalId, onClose, onAdded }) {
-  const [form, setForm] = useState({ name: '', phone: '', gender: 'Male', age: '', blood_group: '', city: '' })
+  const [form, setForm] = useState({ name: '', phone: '', gender: 'Male', age: '', blood_group: '', city: '', abha_number: '' })
   const [errors, setErrors] = useState({})
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
@@ -35,6 +36,8 @@ function AddPatientModal({ hospitalId, onClose, onAdded }) {
     const er = {}
     if (!form.name.trim()) er.name = 'Required'
     if (!/^\d{10}$/.test(form.phone)) er.phone = 'Enter a valid 10-digit number'
+    const abhaDigits = form.abha_number.replace(/\D/g, '')
+    if (abhaDigits && abhaDigits.length !== 14) er.abha_number = 'ABHA must be 14 digits (or leave blank)'
     setErrors(er)
     if (Object.keys(er).length) return
     setBusy(true)
@@ -48,6 +51,7 @@ function AddPatientModal({ hospitalId, onClose, onAdded }) {
         age: form.age ? Number(form.age) : undefined,
         blood_group: form.blood_group || undefined,
         city: form.city,
+        abha_number: abhaDigits || undefined,
         registration_source: 'walkin',
       })
       onAdded()
@@ -78,6 +82,8 @@ function AddPatientModal({ hospitalId, onClose, onAdded }) {
             </select>
           </div>
           <TextInput icon={MapPin} placeholder="City / Village" value={form.city} onChange={set('city')} />
+          <TextInput icon={Fingerprint} placeholder="ABHA Number (optional)" inputMode="numeric" maxLength={17} value={form.abha_number} onChange={set('abha_number')} error={errors.abha_number} />
+          <p className="-mt-1.5 px-1 text-[11px] text-slate-400">14-digit Ayushman Bharat health ID · leave blank if none</p>
           {err && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-600">{err}</div>}
           <button disabled={busy} className="w-full rounded-xl bg-brand-blue py-3 text-sm font-semibold text-white hover:bg-brand-blueDark disabled:opacity-60">
             {busy ? 'Saving…' : 'Register Patient'}
@@ -88,64 +94,6 @@ function AddPatientModal({ hospitalId, onClose, onAdded }) {
   )
 }
 
-/* ---------------- Profile drawer ---------------- */
-function ProfileDrawer({ patient, onClose }) {
-  const [appts, setAppts] = useState(null)
-  useEffect(() => {
-    patientsApi.appointments(patient.patient_id).then(setAppts).catch(() => setAppts([]))
-  }, [patient.patient_id])
-
-  const Detail = ({ icon: Icon, label, value }) => (
-    <div className="flex items-center gap-2.5 rounded-xl bg-slate-50 px-3 py-2.5">
-      <Icon className="h-4 w-4 text-slate-400" />
-      <div className="leading-tight">
-        <p className="text-[13px] font-bold text-brand-navy">{value || '—'}</p>
-        <p className="text-[10px] text-slate-400">{label}</p>
-      </div>
-    </div>
-  )
-
-  return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex justify-end bg-slate-900/50" onMouseDown={onClose}>
-      <motion.div initial={{ x: 380 }} animate={{ x: 0 }} exit={{ x: 380 }} transition={{ type: 'spring', stiffness: 320, damping: 32 }} className="flex h-full w-full max-w-[400px] flex-col bg-white shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between border-b border-slate-100 p-5">
-          <h3 className="text-[15px] font-bold text-brand-navy">Patient Profile</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="h-5 w-5" /></button>
-        </div>
-        <div className="flex-1 overflow-y-auto p-5">
-          <div className="flex items-center gap-3">
-            <Avatar name={patient.name} className="h-14 w-14 text-lg" />
-            <div className="leading-tight">
-              <p className="text-[17px] font-extrabold text-brand-navy">{patient.name}</p>
-              <p className="text-[12px] text-slate-400">PID #{patient.patient_id}</p>
-            </div>
-          </div>
-          <div className="mt-4 grid grid-cols-2 gap-2.5">
-            <Detail icon={Phone} label="Mobile" value={patient.phone} />
-            <Detail icon={User} label="Age / Gender" value={[patient.age && `${patient.age}y`, patient.gender].filter(Boolean).join(' · ')} />
-            <Detail icon={Droplet} label="Blood Group" value={patient.blood_group} />
-            <Detail icon={MapPin} label="City" value={patient.city} />
-          </div>
-          <h4 className="mb-2 mt-6 text-[13px] font-bold text-brand-navy">Recent Appointments</h4>
-          {appts === null ? (
-            <p className="py-4 text-center text-sm text-slate-400">Loading…</p>
-          ) : appts.length === 0 ? (
-            <p className="py-4 text-center text-sm text-slate-400">No appointments yet.</p>
-          ) : (
-            <ul className="space-y-2">
-              {appts.slice(0, 6).map((a) => (
-                <li key={a.appointment_id} className="flex items-center justify-between rounded-xl border border-slate-100 px-3 py-2 text-[12.5px]">
-                  <span className="font-semibold text-brand-navy">{fmtDate(a.appointment_date)}</span>
-                  <span className="capitalize text-slate-500">{a.status}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </motion.div>
-    </motion.div>
-  )
-}
 
 /* ---------------- Page ---------------- */
 export default function AssistantPatients() {
@@ -197,7 +145,7 @@ export default function AssistantPatients() {
             <input
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1) }}
-              placeholder="Search by name or mobile…"
+              placeholder="Search by name, mobile or UHID…"
               className="w-full bg-transparent py-2.5 text-sm outline-none placeholder:text-slate-400"
             />
           </div>
@@ -257,7 +205,7 @@ export default function AssistantPatients() {
                           <Avatar name={p.name} className="h-9 w-9 text-[11px]" />
                           <div className="leading-tight">
                             <p className="font-bold text-brand-navy">{p.name}</p>
-                            <p className="text-[11px] text-slate-400">PID #{p.patient_id}</p>
+                            <p className="font-mono text-[11px] font-semibold text-brand-blue">{p.uhid || `PID #${p.patient_id}`}</p>
                           </div>
                         </div>
                       </td>
@@ -311,7 +259,7 @@ export default function AssistantPatients() {
             onAdded={() => { setShowAdd(false); load() }}
           />
         )}
-        {profile && <ProfileDrawer patient={profile} onClose={() => setProfile(null)} />}
+        {profile && <PatientHistoryDrawer patient={profile} onClose={() => setProfile(null)} />}
       </AnimatePresence>
     </div>
   )

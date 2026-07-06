@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { Pencil, Phone, Mail, Cake, User2, Droplet, MapPin, Globe, ShieldAlert, X } from 'lucide-react'
+import { Pencil, Phone, Mail, Cake, User2, Droplet, MapPin, Globe, ShieldAlert, Fingerprint, X, Camera } from 'lucide-react'
 import { Card, Avatar, PageHeading, ToolButton } from '../../components/clinic/ui.jsx'
 import { TextInput, SelectInput, Banner } from '../../components/common/FormControls.jsx'
+import FamilyMembers from '../../components/patient/FamilyMembers.jsx'
 import { usePatientCtx } from '../../context/PatientContext.jsx'
-import { patientsApi } from '../../api'
+import { patientsApi, fileUrl } from '../../api'
 import { useI18n } from '../../i18n/index.jsx'
 
 function Field({ icon: Icon, label, value }) {
@@ -24,6 +25,14 @@ const LANGUAGES = ['English', 'Hindi', 'Telugu', 'Tamil', 'Kannada', 'Marathi']
 const GENDERS = ['male', 'female', 'other']
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-']
 
+/** Display a stored 14-digit ABHA number as XX-XXXX-XXXX-XXXX. */
+const formatAbha = (v) => {
+  if (!v) return ''
+  const d = String(v).replace(/\D/g, '')
+  if (d.length !== 14) return v
+  return `${d.slice(0, 2)}-${d.slice(2, 6)}-${d.slice(6, 10)}-${d.slice(10, 14)}`
+}
+
 /** Edit modal — updates the patient's own record via PUT /patients/{id}. */
 const GENDER_KEYS = { male: 'ppage.genderMale', female: 'ppage.genderFemale', other: 'ppage.genderOther' }
 
@@ -41,11 +50,34 @@ function EditProfileModal({ patient, onClose, onSaved }) {
     emergency_contact_name: patient.emergency_contact_name || '',
     emergency_contact_phone: patient.emergency_contact_phone || '',
     preferred_language: patient.preferred_language || 'English',
+    abha_number: patient.abha_number || '',
+    abha_address: patient.abha_address || '',
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const [photoUrl, setPhotoUrl] = useState(patient.photo_url || null)
+  const [photoBusy, setPhotoBusy] = useState(false)
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
+
+  // Photo uploads persist immediately (separate from the Save button).
+  const onPhoto = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setPhotoBusy(true)
+    setError(null)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const updated = await patientsApi.uploadPhoto(patient.patient_id, fd)
+      setPhotoUrl(updated.photo_url)
+      onSaved(updated)
+    } catch (err) {
+      setError(err.message || 'Could not upload photo')
+    } finally {
+      setPhotoBusy(false)
+    }
+  }
 
   const save = async (e) => {
     e.preventDefault()
@@ -80,6 +112,22 @@ function EditProfileModal({ patient, onClose, onSaved }) {
 
         {error && <div className="mb-4"><Banner type="error">{error}</Banner></div>}
 
+        {/* Profile photo */}
+        <div className="mb-5 flex flex-col items-center gap-2">
+          <div className="relative">
+            {photoUrl ? (
+              <img src={fileUrl(photoUrl)} alt={patient.name} className="h-24 w-24 rounded-full object-cover ring-4 ring-slate-100" />
+            ) : (
+              <Avatar name={patient.name} className="h-24 w-24 text-2xl" />
+            )}
+            <label className={`absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full bg-brand-blue text-white shadow-md hover:bg-brand-blueDark ${photoBusy ? 'opacity-60' : 'cursor-pointer'}`}>
+              <Camera className="h-4 w-4" />
+              <input type="file" accept="image/*" className="hidden" onChange={onPhoto} disabled={photoBusy} />
+            </label>
+          </div>
+          <p className="text-[12px] text-slate-400">{photoBusy ? 'Uploading…' : 'Tap the camera to add or change your photo'}</p>
+        </div>
+
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <TextInput label={t('ppage.fullName')} value={form.name} onChange={set('name')} />
           <TextInput label={t('ppage.email')} type="email" value={form.email} onChange={set('email')} />
@@ -102,6 +150,26 @@ function EditProfileModal({ patient, onClose, onSaved }) {
           <TextInput label={t('ppage.pincode')} value={form.pincode} onChange={set('pincode')} />
           <TextInput label={t('ppage.emergencyName')} value={form.emergency_contact_name} onChange={set('emergency_contact_name')} />
           <TextInput label={t('ppage.emergencyPhone')} value={form.emergency_contact_phone} onChange={set('emergency_contact_phone')} />
+
+          <div className="mt-1 flex items-center gap-2 sm:col-span-2">
+            <Fingerprint className="h-4 w-4 text-brand-green" />
+            <span className="text-[13px] font-bold text-brand-navy">{t('ppage.abhaSection')}</span>
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10.5px] font-semibold text-slate-500">{t('ppage.abhaOptional')}</span>
+          </div>
+          <TextInput
+            label={t('ppage.abhaNumber')}
+            value={form.abha_number}
+            onChange={set('abha_number')}
+            placeholder={t('ppage.abhaNumberHint')}
+            inputMode="numeric"
+            maxLength={20}
+          />
+          <TextInput
+            label={t('ppage.abhaAddress')}
+            value={form.abha_address}
+            onChange={set('abha_address')}
+            placeholder={t('ppage.abhaAddressHint')}
+          />
         </div>
 
         <div className="mt-6 flex justify-end gap-3">
@@ -136,7 +204,11 @@ function Profile() {
 
       {/* Identity header */}
       <Card className="flex flex-wrap items-center gap-4 p-5">
-        <Avatar name={patient.name} className="h-16 w-16 text-xl" />
+        {patient.photo_url ? (
+          <img src={fileUrl(patient.photo_url)} alt={patient.name} className="h-16 w-16 rounded-full object-cover ring-2 ring-slate-100" />
+        ) : (
+          <Avatar name={patient.name} className="h-16 w-16 text-xl" />
+        )}
         <div className="leading-tight">
           <p className="text-[18px] font-extrabold text-brand-navy">{patient.name}</p>
           <p className="text-[13px] text-slate-500">{patient.email || '—'}</p>
@@ -158,8 +230,12 @@ function Profile() {
             <Field icon={Droplet} label={t('ppage.bloodGroup')} value={patient.blood_group} />
             <Field icon={Globe} label={t('ppage.preferredLanguage')} value={patient.preferred_language} />
           </div>
-          <div className="mt-3">
-            <Field icon={MapPin} label={t('ppage.address')} value={[patient.address, patient.city, patient.pincode].filter(Boolean).join(', ')} />
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <Field icon={MapPin} label={t('ppage.address')} value={[patient.address, patient.city, patient.pincode].filter(Boolean).join(', ')} />
+            </div>
+            <Field icon={Fingerprint} label={t('ppage.abhaNumber')} value={formatAbha(patient.abha_number)} />
+            <Field icon={Fingerprint} label={t('ppage.abhaAddress')} value={patient.abha_address} />
           </div>
         </Card>
 
@@ -185,6 +261,8 @@ function Profile() {
           </div>
         </Card>
       </div>
+
+      <FamilyMembers patientId={patient.patient_id} />
 
       {editing && (
         <EditProfileModal patient={patient} onClose={() => setEditing(false)} onSaved={setPatient} />

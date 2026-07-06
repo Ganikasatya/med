@@ -105,20 +105,30 @@ export async function listenOnce(lang) {
 // the common cases in all three languages.
 
 const YES_WORDS = [
-  'yes', 'yeah', 'yep', 'sure', 'ok', 'okay', 'correct', 'confirm', 'book',
-  'avunu', 'avunandi', 'sare', 'yes andi', 'okay andi',
-  '\u0c05\u0c35\u0c41\u0c28\u0c41', // ?????
-  '\u0c05\u0c35\u0c41\u0c28\u0c02\u0c21\u0c3f', // ???????
-  '\u0c38\u0c30\u0c47', // ???
-  '\u0c0e\u0c38\u0c4d', // ???
-  'haan', 'haa', 'hanji', 'ji',
+  // English
+  'yes', 'yeah', 'yep', 'yup', 'ya', 'sure', 'ok', 'okay', 'okey', 'correct',
+  'confirm', 'confirmed', 'book', 'right', 'fine', 'good', 'done', 'proceed',
+  'go ahead', 'do it', 'book it',
+  // Telugu (romanized + script): avunu / sare / alaage / cheyandi / book / es
+  'avunu', 'avunandi', 'sare', 'saree', 'alaage', 'alage', 'cheyandi', 'cheyyandi', 'cheyyi',
+  '\u0c05\u0c35\u0c41\u0c28\u0c41', '\u0c05\u0c35\u0c41\u0c28\u0c02\u0c21\u0c3f',
+  '\u0c38\u0c30\u0c47', '\u0c05\u0c32\u0c3e\u0c17\u0c47', '\u0c1a\u0c47\u0c2f\u0c02\u0c21\u0c3f',
+  '\u0c1a\u0c46\u0c2f\u0c4d\u0c2f\u0c02\u0c21\u0c3f', '\u0c2c\u0c41\u0c15\u0c4d', '\u0c13\u0c15\u0c47', '\u0c0e\u0c38\u0c4d',
+  // Hindi (romanized + script): haan / ji / theek / karo / kar do
+  'haan', 'haa', 'han', 'hanji', 'haan ji', 'ji', 'theek', 'thik', 'theek hai', 'thik hai', 'karo', 'kar do',
+  '\u0939\u093e\u0902', '\u0939\u093e\u0901', '\u0920\u0940\u0915', '\u0920\u0940\u0915 \u0939\u0948',
+  '\u092c\u0941\u0915', '\u0915\u0930\u094b', '\u0915\u0930 \u0926\u094b', '\u095b\u0930\u0942\u0930',
 ]
 const NO_WORDS = [
-  'no', 'nope', 'cancel', 'wrong', 'change', 'back',
-  'kaadu', 'kadu', 'vaddu', 'ledu', 'nahi', 'nahin',
-  '\u0c15\u0c3e\u0c26\u0c41', // ????
-  '\u0c35\u0c26\u0c4d\u0c26\u0c41', // ?????
-  '\u0c32\u0c47\u0c26\u0c41', // ????
+  // English
+  'no', 'nope', 'nah', 'cancel', 'wrong', 'change', 'back', 'go back', 'stop',
+  // Telugu (romanized + script): kaadu / vaddu / ledu / maarchu / venakki
+  'kaadu', 'kadu', 'vaddu', 'vadhu', 'ledu',
+  '\u0c15\u0c3e\u0c26\u0c41', '\u0c35\u0c26\u0c4d\u0c26\u0c41', '\u0c32\u0c47\u0c26\u0c41',
+  '\u0c2e\u0c3e\u0c30\u0c4d\u0c1a\u0c41', '\u0c35\u0c46\u0c28\u0c15\u0c4d\u0c15\u0c3f',
+  // Hindi (romanized + script): nahi / galat / badlo
+  'nahi', 'nahin', 'galat', 'badlo',
+  '\u0928\u0939\u0940\u0902', '\u0917\u0932\u0924', '\u092c\u0926\u0932\u094b', '\u0930\u0926\u094d\u0926',
 ]
 
 function localYesNo(text) {
@@ -129,8 +139,13 @@ function localYesNo(text) {
     .replace(/\s+/g, ' ')
     .trim()
   if (!normalized) return ''
-  if (YES_WORDS.some((word) => normalized.includes(word))) return 'yes'
-  if (NO_WORDS.some((word) => normalized.includes(word))) return 'no'
+  const tokens = new Set(normalized.split(' '))
+  // Single words must match a whole token (so "know" never matches "no");
+  // multi-word entries match anywhere in the phrase. Yes wins ties so an
+  // affirmative at the confirm step reliably books.
+  const has = (list) => list.some((w) => (w.includes(' ') ? normalized.includes(w) : tokens.has(w)))
+  if (has(YES_WORDS)) return 'yes'
+  if (has(NO_WORDS)) return 'no'
   return ''
 }
 /** Cheap token-overlap score between a spoken phrase and an option label. */

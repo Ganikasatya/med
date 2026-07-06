@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { CalendarOff, Plus, Trash2, X } from 'lucide-react'
-import { Card, StatusBadge, PageHeading, ToolButton } from '../../components/clinic/ui.jsx'
+import { Card, StatusBadge, ToolButton } from '../../components/clinic/ui.jsx'
 import { TextInput, Banner } from '../../components/common/FormControls.jsx'
 import { useDoctorCtx } from '../../context/DoctorContext.jsx'
 import { doctorsApi } from '../../api'
@@ -47,7 +47,7 @@ function AddHolidayModal({ onClose, onSave }) {
   )
 }
 
-function Holidays() {
+export function HolidaysPanel() {
   const { doctorId } = useDoctorCtx()
   const [holidays, setHolidays] = useState([])
   const [loading, setLoading] = useState(true)
@@ -84,9 +84,13 @@ function Holidays() {
 
   return (
     <div className="flex flex-col gap-4">
-      <PageHeading title="Holidays & Leave" subtitle="Mark days you're unavailable.">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-[15px] font-bold text-brand-navy">Holidays &amp; Leave</h3>
+          <p className="text-[12px] font-medium text-slate-500">Mark days you&apos;re unavailable.</p>
+        </div>
         <ToolButton icon={Plus} tone="primary" onClick={() => setAdding(true)}>Add Holiday</ToolButton>
-      </PageHeading>
+      </div>
 
       {error && <Banner type="error">{error}</Banner>}
 
@@ -111,6 +115,15 @@ function Holidays() {
       )}
 
       {adding && <AddHolidayModal onClose={() => setAdding(false)} onSave={add} />}
+    </div>
+  )
+}
+
+/** Standalone page wrapper (route kept for direct access, no longer in sidebar). */
+function Holidays() {
+  return (
+    <div className="flex flex-col gap-4">
+      <HolidaysPanel />
     </div>
   )
 }

@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { MapPin, ChevronDown, User, Stethoscope, Menu, X } from 'lucide-react'
-import Logo from '../common/Logo.jsx'
 import { BRAND } from '../../data/landingData.js'
 import { useAuthModal } from '../../context/AuthModalContext.jsx'
 import { useI18n, LANGS } from '../../i18n/index.jsx'
@@ -49,10 +48,26 @@ function Navbar() {
   ]
 
   return (
-    <header className="relative z-30 flex h-20 shrink-0 items-center justify-between border-b border-slate-100 bg-white px-4 sm:px-6 lg:px-8">
-      {/* Left: logo + location */}
+    <header className="relative z-30 flex h-24 shrink-0 items-center justify-between border-b border-slate-100 bg-white px-4 sm:px-6 lg:px-8">
+      {/* Left: logo + location. Landing-only — WoVerse-style lockup: icon left,
+          wordmark + tagline stacked on the right. */}
       <div className="flex items-center gap-6">
-        <Logo />
+        <a href="/" className="flex items-center gap-3">
+          <img src="/tapcure-icon.png" alt="TapCure" className="h-20 w-auto shrink-0 object-contain" />
+          <span className="flex flex-col items-center leading-none">
+            <span className="logo-3d text-[32px]">
+              <span className="logo-3d-teal">Tap</span>
+              <span className="logo-3d-blue">Cure</span>
+            </span>
+            <span className="mt-2 flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-teal" />
+              <span className="h-px w-5 bg-slate-300" />
+              <span className="whitespace-nowrap">One tap to cure</span>
+              <span className="h-px w-5 bg-slate-300" />
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand-blue" />
+            </span>
+          </span>
+        </a>
         <div className="hidden items-center gap-2 border-l border-slate-200 pl-6 lg:flex" ref={cityRef}>
           <MapPin className="h-5 w-5 text-brand-green" />
           <div className="relative leading-tight">

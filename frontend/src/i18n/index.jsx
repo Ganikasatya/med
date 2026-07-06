@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react'
 import { landingT } from './dict/landing.js'
 import { dashboardT } from './dict/dashboard.js'
+import { symptomT } from './dict/symptom.js'
 
 /**
  * Lightweight i18n for the patient-facing surfaces. The selected language is
@@ -71,6 +72,8 @@ const coreT = {
   'auth.verifyLogin': { en: 'Verify & Continue', te: 'ధృవీకరించి కొనసాగండి', hi: 'सत्यापित करें और जारी रखें' },
   'auth.createAccount': { en: 'Create account', te: 'ఖాతా సృష్టించండి', hi: 'खाता बनाएं' },
   'auth.cityLabel': { en: 'City (optional)', te: 'నగరం (ఐచ్ఛికం)', hi: 'शहर (वैकल्पिक)' },
+  'auth.abhaLabel': { en: 'ABHA Number (optional)', te: 'ABHA నంబర్ (ఐచ్ఛికం)', hi: 'ABHA नंबर (वैकल्पिक)' },
+  'auth.abhaPrompt': { en: 'If you have an ABHA health ID, say or type the 14 digit number. Otherwise skip.', te: 'మీకు ABHA ఆరోగ్య ID ఉంటే, 14 అంకెల నంబర్ చెప్పండి లేదా టైప్ చేయండి. లేకపోతే దాటవేయండి.', hi: 'यदि आपके पास ABHA हेल्थ ID है, तो 14 अंकों का नंबर बोलें या टाइप करें। अन्यथा छोड़ें।' },
   'auth.back': { en: 'Back', te: 'వెనుకకు', hi: 'वापस' },
   'auth.listening': { en: 'Listening…', te: 'వింటోంది…', hi: 'सुन रहा है…' },
   'auth.tapMic': { en: 'Tap the mic and speak', te: 'మైక్ నొక్కి మాట్లాడండి', hi: 'माइक दबाएं और बोलें' },
@@ -108,7 +111,7 @@ const coreT = {
 }
 
 // Core (navbar/hero/lifeline/auth) merged with the Phase-2 landing + dashboard dicts.
-const T = { ...coreT, ...landingT, ...dashboardT }
+const T = { ...coreT, ...landingT, ...dashboardT, ...symptomT }
 
 const Ctx = createContext(null)
 

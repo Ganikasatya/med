@@ -16,21 +16,36 @@ from ..deps import ensure_same_tenant, get_current_user, require_permission
 from ..rbac import ROLE_PATIENT, is_clinic_staff
 from ..models import (
     Appointment, ApptCancellationLog, ApptRescheduleHistory, ApptStatusHistory,
-    Doctor, DoctorAffiliation, Patient, User,
+    Doctor, DoctorAffiliation, FamilyMember, Patient, User,
 )
 from ..schemas.appointment import (
     AppointmentCreate, AppointmentOut, AppointmentUpdate, CancellationOut,
-    CancelRequest, FeedbackRequest, RescheduleHistoryOut, RescheduleRequest,
-    StatusHistoryOut, WalkInRequest,
+    CancelRequest, CollectPaymentRequest, FeedbackRequest, RescheduleHistoryOut,
+    RescheduleRequest, StatusHistoryOut, WalkInRequest,
 )
 from ..services import audit
+from ..services import normalize
 from ..services import scheduling as sch
 from ..services import token_engine as te
+from ..services import uhid as uhid_service
 
 router = APIRouter(prefix="/appointments", tags=["appointments"])
 
 
 # ---- helpers ----
+def _attach_family_names(db: Session, appts: list[Appointment]) -> list[Appointment]:
+    """Tag each appointment with the dependent's name when it was booked for one,
+    so lists can show 'for <member>' instead of just the account holder."""
+    ids = {a.family_member_id for a in appts if a.family_member_id}
+    if not ids:
+        return appts
+    members = {m.member_id: m.name for m in db.scalars(select(FamilyMember).where(FamilyMember.member_id.in_(ids)))}
+    for a in appts:
+        if a.family_member_id:
+            a.family_member_name = members.get(a.family_member_id)
+    return appts
+
+
 def _appt(db: Session, appointment_id: int) -> Appointment:
     a = db.get(Appointment, appointment_id)
     if not a:
@@ -138,11 +153,21 @@ def list_appointments(
     if status_filter:
         stmt = stmt.where(Appointment.status == status_filter)
     stmt = _hide_personal(stmt, me)
-    return db.scalars(stmt.order_by(Appointment.appointment_date.desc(), Appointment.appointment_id.desc()).offset((page - 1) * size).limit(size)).all()
+    appts = db.scalars(stmt.order_by(Appointment.appointment_date.desc(), Appointment.appointment_id.desc()).offset((page - 1) * size).limit(size)).all()
+    return _attach_family_names(db, list(appts))
 
 
-@router.post("", response_model=AppointmentOut, status_code=201)
-def book(body: AppointmentCreate, me: User = Depends(require_permission("appointment", "create")), db: Session = Depends(get_db)):
+def quote_fee(db: Session, body: AppointmentCreate) -> float:
+    """The booking fee for a prospective appointment (affiliation fee, else the
+    doctor's). Used by the payment flow to know how much to charge."""
+    doctor = _require_doctor(db, body.doctor_id)
+    aff = _resolve_affiliation(db, doctor, body.affiliation_id)
+    return float(aff.consultation_fee or doctor.consultation_fee or 0)
+
+
+def create_booking(db: Session, me: User, body: AppointmentCreate, booking_fee_paid: float = 0) -> Appointment:
+    """Validate + create an appointment and mint its queue token. Shared by the
+    direct booking endpoint and the post-payment confirmation. Commits."""
     doctor = _require_doctor(db, body.doctor_id)
     aff = _resolve_affiliation(db, doctor, body.affiliation_id)
     patient = db.get(Patient, body.patient_id)
@@ -159,8 +184,11 @@ def book(body: AppointmentCreate, me: User = Depends(require_permission("appoint
         ensure_same_tenant(me, aff.hospital_id)
         if is_clinic_staff(me.role.name if me.role else None) and not aff.managed_by_hospital:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Clinic staff cannot book on a doctor's personal practice")
-        if aff.hospital_id and patient.hospital_id != aff.hospital_id:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Patient and doctor belong to different hospitals")
+        # NOTE: no patient-vs-doctor hospital check. Patients are "global" — one
+        # anchored to clinic A may be booked with a doctor at clinic B; the
+        # appointment takes the doctor's hospital and the patient then shows up
+        # in clinic B's list (see patients._at_hospital). Staff are still confined
+        # to the doctor's hospital by ensure_same_tenant above.
 
     avail = sch.available_slots(db, doctor, body.appointment_date, aff.affiliation_id)
     if not avail["available"]:
@@ -175,8 +203,11 @@ def book(body: AppointmentCreate, me: User = Depends(require_permission("appoint
         hospital_id=aff.hospital_id or doctor.hospital_id, doctor_id=doctor.doctor_id, affiliation_id=aff.affiliation_id, patient_id=patient.patient_id,
         family_member_id=body.family_member_id, appointment_date=body.appointment_date,
         slot_time=body.slot_time, appointment_type=body.appointment_type, status="scheduled",
-        consultation_fee=aff.consultation_fee or doctor.consultation_fee, booking_fee_paid=0,
-        notes=body.notes, source=body.source, booked_by=me.user_id,
+        consultation_fee=aff.consultation_fee or doctor.consultation_fee, booking_fee_paid=booking_fee_paid,
+        # Voice bookings carry the spoken complaint as the note, in the patient's
+        # own script (Telugu/Hindi). Translate it to English so clinic staff and
+        # the doctor can read it; a no-op when the note is already Latin/English.
+        notes=normalize.to_english_text(body.notes), source=body.source, booked_by=me.user_id,
         origin_lat=body.origin_lat, origin_lng=body.origin_lng,
         origin_label=body.origin_label, travel_minutes=body.travel_minutes,
     )
@@ -190,6 +221,11 @@ def book(body: AppointmentCreate, me: User = Depends(require_permission("appoint
     db.commit()
     db.refresh(appt)
     return appt
+
+
+@router.post("", response_model=AppointmentOut, status_code=201)
+def book(body: AppointmentCreate, me: User = Depends(require_permission("appointment", "create")), db: Session = Depends(get_db)):
+    return create_booking(db, me, body)
 
 
 # ===================================================== Static paths =========
@@ -219,7 +255,7 @@ def today_for_doctor(doctor_id: int = Query(...), me: User = Depends(require_per
         ),
         me,
     )
-    return db.scalars(stmt.order_by(Appointment.slot_time)).all()
+    return _attach_family_names(db, list(db.scalars(stmt.order_by(Appointment.slot_time)).all()))
 
 
 @router.get("/upcoming", response_model=list[AppointmentOut])
@@ -233,7 +269,7 @@ def upcoming_for_patient(patient_id: int = Query(...), days_ahead: int = Query(3
     elif not (me.role and me.role.name == "PATIENT"):
         ensure_same_tenant(me, patient.hospital_id)
     horizon = date.today() + timedelta(days=days_ahead)
-    return db.scalars(
+    appts = db.scalars(
         select(Appointment).where(
             Appointment.patient_id == patient_id,
             Appointment.appointment_date >= date.today(),
@@ -241,6 +277,7 @@ def upcoming_for_patient(patient_id: int = Query(...), days_ahead: int = Query(3
             Appointment.status.in_(("scheduled", "confirmed", "in_progress")),
         ).order_by(Appointment.appointment_date)
     ).all()
+    return _attach_family_names(db, list(appts))
 
 
 @router.get("/cancellations", response_model=list[CancellationOut])
@@ -281,6 +318,27 @@ def cancel(body: CancelRequest, me: User = Depends(require_permission("appointme
     return _do_cancel(db, me, body.appointment_id, body.reason)
 
 
+@router.post("/{appointment_id}/collect-payment", response_model=AppointmentOut)
+def collect_consultation_payment(
+    appointment_id: int,
+    body: CollectPaymentRequest,
+    me: User = Depends(require_permission("appointment", "update")),
+    db: Session = Depends(get_db),
+):
+    """Record the in-person consultation fee as paid (reception or doctor). This
+    is what unlocks the patient to be called as the next token."""
+    appt = _appt(db, appointment_id)
+    ensure_same_tenant(me, appt.hospital_id)
+    appt.consultation_paid = True
+    appt.consultation_payment_method = body.method
+    appt.consultation_paid_at = utcnow()
+    appt.consultation_paid_by = me.user_id
+    audit.log_activity(db, me.user_id, "appointment.collect_payment", "appointment", {"appointment_id": appointment_id, "method": body.method})
+    db.commit()
+    db.refresh(appt)
+    return appt
+
+
 @router.post("/walk-in", response_model=AppointmentOut, status_code=201)
 def walk_in(body: WalkInRequest, me: User = Depends(require_permission("appointment", "create")), db: Session = Depends(get_db)):
     doctor = _require_doctor(db, body.doctor_id)
@@ -288,16 +346,27 @@ def walk_in(body: WalkInRequest, me: User = Depends(require_permission("appointm
     ensure_same_tenant(me, aff.hospital_id)
     if is_clinic_staff(me.role.name if me.role else None) and not aff.managed_by_hospital:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Clinic staff cannot register walk-ins on a doctor's personal practice")
+    # Doctor must actually be consulting today — block walk-ins when they're on
+    # holiday/leave or don't consult on this weekday. (Fully-booked is fine:
+    # walk-ins join the live queue beyond the bookable slots.)
+    today = date.today()
+    if sch.is_on_holiday(doctor, today):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Doctor is on holiday today — walk-in not allowed.")
+    if sch.is_on_leave(db, doctor, today):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Doctor is on leave today — walk-in not allowed.")
+    if not sch.active_schedules(doctor, today, aff.affiliation_id):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Doctor does not consult today — walk-in not allowed.")
     # Find-or-create the patient by phone within the doctor's hospital.
     patient = db.scalar(select(Patient).where(Patient.hospital_id == (aff.hospital_id or doctor.hospital_id), Patient.phone == body.phone))
     if not patient:
-        patient = Patient(hospital_id=aff.hospital_id or doctor.hospital_id, name=body.name, phone=body.phone, registration_source="walkin")
+        patient = Patient(hospital_id=aff.hospital_id or doctor.hospital_id, name=body.name, phone=body.phone, registration_source="walkin", uhid=uhid_service.allocate(db))
         db.add(patient)
         db.flush()
     appt = Appointment(
         hospital_id=aff.hospital_id or doctor.hospital_id, doctor_id=doctor.doctor_id, affiliation_id=aff.affiliation_id, patient_id=patient.patient_id,
         appointment_date=date.today(), appointment_type="walkin", status="confirmed",
-        consultation_fee=aff.consultation_fee or doctor.consultation_fee, notes=body.notes, source="walkin",
+        consultation_fee=aff.consultation_fee or doctor.consultation_fee,
+        notes=normalize.to_english_text(body.notes), source="walkin",
         booked_by=me.user_id, confirmed_at=utcnow(),
     )
     db.add(appt)

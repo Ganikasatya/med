@@ -1,14 +1,28 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Radio, SkipForward, Megaphone, XCircle, CheckCircle2, PlayCircle, RefreshCw, Hash, Users, CheckCheck, Clock } from 'lucide-react'
+import { Radio, SkipForward, Megaphone, XCircle, CheckCircle2, PlayCircle, RefreshCw, Hash, Users, CheckCheck, Clock, Activity, Wallet } from 'lucide-react'
 import { Card, PageHeading, ToolButton, StatCard, Avatar } from '../../components/clinic/ui.jsx'
 import AnimatedNumber from '../../components/common/AnimatedNumber.jsx'
-import { doctorsApi, tokensApi } from '../../api'
+import { VitalsModal } from '../../components/patient/VitalsPanel.jsx'
+import { doctorsApi, tokensApi, appointmentsApi } from '../../api'
 
 const PRIORITY_PILL = {
   urgent: 'bg-amber-100 text-amber-700',
   emergency: 'bg-red-100 text-red-600',
+}
+
+/** One-line summary of a token's latest vitals for the queue card. */
+function vitalsSummary(v) {
+  if (!v) return null
+  const parts = []
+  if (v.bp) parts.push(`BP ${v.bp}`)
+  if (v.pulse != null) parts.push(`${v.pulse}bpm`)
+  if (v.temperature_f != null) parts.push(`${v.temperature_f}°F`)
+  if (v.spo2 != null) parts.push(`SpO₂ ${v.spo2}%`)
+  if (v.blood_sugar != null) parts.push(`Sugar ${v.blood_sugar}`)
+  if (!parts.length && v.weight_kg != null) parts.push(`${v.weight_kg}kg`)
+  return parts.join(' · ')
 }
 
 const container = { hidden: {}, show: { transition: { staggerChildren: 0.07 } } }
@@ -22,6 +36,7 @@ export default function AssistantQueue() {
   const [stats, setStats] = useState(null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
+  const [vitalsFor, setVitalsFor] = useState(null)  // token whose patient we're recording vitals for
 
   useEffect(() => {
     doctorsApi.list().then((d) => {
@@ -62,9 +77,21 @@ export default function AssistantQueue() {
     setBusy(false)
   }
 
+  // Collect the consultation fee → marks the token Paid so it can be called.
+  // Confirm first so the front desk understands exactly what the click does.
+  const collectPayment = (t) => {
+    const ok = window.confirm(
+      `Collect ₹${t.consultation_fee} from ${t.patient_name || 'this patient'}?\n\n` +
+      `This marks token ${t.display_code} as PAID so the doctor can call them. ` +
+      `Only confirm once you've taken the money.`,
+    )
+    if (ok) act(() => appointmentsApi.collectPayment(t.appointment_id))
+  }
+
   const current = queue?.current
   const waiting = queue?.waiting || []
   const doctor = doctors.find((d) => String(d.doctor_id) === String(doctorId))
+  const unpaidCount = waiting.filter((t) => t.consultation_fee > 0 && !t.consultation_paid).length
 
   return (
     <div className="flex flex-col gap-5">
@@ -142,7 +169,7 @@ export default function AssistantQueue() {
                 <div className="flex items-center gap-2.5 text-white">
                   <Avatar name={current.patient_name || 'Patient'} tone="bg-white/20" className="h-11 w-11 text-base" />
                   <div className="leading-tight">
-                    <p className="text-[18px] font-bold">{current.patient_name || 'Patient'}</p>
+                    <p className="text-[18px] font-bold">{current.patient_name || 'Patient'}{current.family_member_name ? ` · for ${current.family_member_name}` : ''}</p>
                     <p className="text-[13px] text-white/70">
                       {[current.patient_age && `${current.patient_age}y`, current.patient_gender].filter(Boolean).join(' · ') || 'In consultation'}
                     </p>
@@ -183,7 +210,7 @@ export default function AssistantQueue() {
               whileTap={{ scale: 0.95 }}
               onClick={() => act(() => (current ? tokensApi.complete(current.token_id) : tokensApi.next(doctorId)))}
               disabled={busy || (!current && waiting.length === 0)}
-              className="flex items-center gap-2 rounded-xl bg-white px-5 py-2.5 text-sm font-bold text-brand-blue shadow-sm hover:bg-blue-50 disabled:opacity-50"
+              className="hero-cta flex items-center gap-2 rounded-xl bg-white px-5 py-2.5 text-sm font-bold text-brand-blue shadow-sm hover:bg-blue-50 disabled:opacity-50"
             >
               {current ? <><CheckCircle2 className="h-4 w-4" /> Complete</> : <><PlayCircle className="h-4 w-4" /> Call Next</>}
             </motion.button>
@@ -214,6 +241,15 @@ export default function AssistantQueue() {
             {waiting.length} waiting
           </motion.span>
         </div>
+        {unpaidCount > 0 && (
+          <div className="flex items-center gap-2 border-b border-amber-100 bg-amber-50 px-5 py-2.5 text-[12.5px] font-medium text-amber-800">
+            <Wallet className="h-4 w-4 shrink-0 text-amber-500" />
+            <span>
+              {unpaidCount} {unpaidCount === 1 ? 'patient hasn’t' : 'patients haven’t'} paid.
+              Tap <span className="font-bold">Collect ₹</span> on their row to take the fee and mark them Paid — the doctor can only call patients once they’re Paid.
+            </span>
+          </div>
+        )}
         {waiting.length === 0 ? (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center justify-center gap-2 py-12 text-slate-400">
             <Clock className="h-8 w-8 text-slate-300" />
@@ -238,17 +274,57 @@ export default function AssistantQueue() {
                     </span>
                     <Avatar name={t.patient_name || 'Patient'} className="h-9 w-9 text-[11px]" />
                     <div className="min-w-0 leading-tight">
-                      <p className="truncate text-[14px] font-bold text-brand-navy">{t.patient_name || 'Patient'}</p>
+                      <p className="flex items-center gap-1.5 truncate text-[14px] font-bold text-brand-navy">
+                        {t.patient_name || 'Patient'}
+                        {t.family_member_name && <span className="shrink-0 rounded-full bg-purple-100 px-1.5 py-0.5 text-[9px] font-bold text-purple-600">for {t.family_member_name}</span>}
+                      </p>
                       <div className="mt-0.5 flex items-center gap-2">
                         <span className="text-[12px] font-semibold text-slate-500">{t.display_code}</span>
                         {t.priority !== 'normal' && (
                           <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${PRIORITY_PILL[t.priority] || 'bg-slate-100 text-slate-500'}`}>{t.priority}</span>
                         )}
                         {t.is_walkin && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">walk-in</span>}
+                        {t.consultation_fee > 0 && !t.consultation_paid ? (
+                          <motion.button
+                            onClick={() => collectPayment(t)}
+                            disabled={busy}
+                            title={`Click to collect ₹${t.consultation_fee} and mark this token as Paid`}
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            animate={{ boxShadow: ['0 0 0 0 rgba(245,158,11,0.5)', '0 0 0 6px rgba(245,158,11,0)', '0 0 0 0 rgba(245,158,11,0)'] }}
+                            transition={{ duration: 1.8, repeat: Infinity, ease: 'easeOut' }}
+                            className="inline-flex items-center gap-1.5 rounded-full bg-amber-500 px-3 py-1 text-[11.5px] font-bold text-white hover:bg-amber-600 disabled:opacity-60"
+                          >
+                            <Wallet className="h-3.5 w-3.5" />
+                            Collect ₹{t.consultation_fee}
+                            <span className="font-semibold text-white/85">→ mark Paid</span>
+                          </motion.button>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">
+                            <CheckCircle2 className="h-3 w-3" /> Paid
+                          </span>
+                        )}
                       </div>
+                      {t.latest_vitals && (
+                        <p className={`mt-1 flex items-center gap-1 text-[11px] font-medium ${t.latest_vitals.abnormal ? 'text-red-600' : 'text-emerald-600'}`}>
+                          <Activity className="h-3 w-3 shrink-0" /> {vitalsSummary(t.latest_vitals) || 'Vitals recorded'}
+                          {t.latest_vitals.abnormal && <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[9px] font-bold uppercase text-red-600">Check</span>}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <div className="flex shrink-0 gap-1.5">
+                    {t.patient_id && (
+                      <motion.button
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
+                        onClick={() => setVitalsFor(t)}
+                        title="Record vitals"
+                        className="flex h-9 w-9 items-center justify-center rounded-lg border border-rose-200 text-rose-500 hover:bg-rose-50"
+                      >
+                        <Activity className="h-4 w-4" />
+                      </motion.button>
+                    )}
                     {[
                       { icon: Megaphone, title: 'Recall', fn: () => tokensApi.recall(t.token_id), cls: 'border-slate-200 text-slate-500 hover:bg-slate-50' },
                       { icon: SkipForward, title: 'Skip', fn: () => tokensApi.skip(t.token_id), cls: 'border-slate-200 text-slate-500 hover:bg-slate-50' },
@@ -273,6 +349,18 @@ export default function AssistantQueue() {
           </ul>
         )}
       </Card>
+
+      <AnimatePresence>
+        {vitalsFor && (
+          <VitalsModal
+            patient={{ patient_id: vitalsFor.patient_id, name: vitalsFor.patient_name, uhid: vitalsFor.patient_uhid }}
+            appointmentId={vitalsFor.appointment_id}
+            defaultFamilyMemberId={vitalsFor.family_member_id}
+            onClose={() => setVitalsFor(null)}
+            onSaved={() => loadQueue()}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }

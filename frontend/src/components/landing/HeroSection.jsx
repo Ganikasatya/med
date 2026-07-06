@@ -1,4 +1,4 @@
-import { Search, MapPin, ChevronDown, CalendarDays, Ticket, ChevronRight } from 'lucide-react'
+import { Search, MapPin, ChevronDown, CalendarDays, Ticket, ChevronRight, ShieldCheck, Star } from 'lucide-react'
 import HeroVisual from './HeroVisual.jsx'
 import { POPULAR_SEARCHES, BRAND } from '../../data/landingData.js'
 import { useAuthModal } from '../../context/AuthModalContext.jsx'
@@ -18,6 +18,11 @@ function HeroSection() {
     <section className="relative flex shrink-0 flex-col gap-6 px-4 pt-3 sm:px-8 lg:flex-row">
       {/* Left column */}
       <div className="flex w-full flex-col lg:w-[52%]">
+        <span className="mb-4 inline-flex w-fit items-center gap-2 rounded-full border border-slate-200 bg-white/60 px-3 py-1 text-xs font-medium text-slate-500">
+          <span className="h-1.5 w-1.5 rounded-full bg-brand-green" />
+          {t('journey.trust.patients')}
+        </span>
+
         <h1 className="text-3xl font-extrabold leading-[1.08] tracking-tight sm:text-4xl lg:text-[46px] lg:leading-[1.04]">
           <span className="block text-brand-navy">{t('hero.line1')}</span>
           <span className="block text-brand-navy">{t('hero.line2')}</span>
@@ -89,9 +94,33 @@ function HeroSection() {
         </div>
       </div>
 
-      {/* Right column — visual */}
-      <div className="relative w-full lg:w-[48%]">
+      {/* Right column — visual + floating trust badges */}
+      <div className="relative min-h-[320px] w-full lg:min-h-0 lg:w-[48%]">
         <HeroVisual />
+
+        <div className="absolute left-1 top-8 hidden rounded-2xl border border-slate-100 bg-white px-4 py-3 shadow-cardHover lg:block">
+          <div className="flex items-center gap-3">
+            <span className="grid h-9 w-9 place-items-center rounded-full bg-brand-greenLight text-brand-green">
+              <ShieldCheck className="h-4 w-4" />
+            </span>
+            <div className="text-xs">
+              <p className="font-semibold text-brand-navy">{t('feat.trustedDoctors.title')}</p>
+              <p className="text-slate-400">{t('feat.trustedDoctors.desc')}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="absolute bottom-10 right-1 hidden rounded-2xl border border-slate-100 bg-white px-4 py-3 shadow-cardHover lg:block">
+          <div className="flex items-center gap-3">
+            <span className="grid h-9 w-9 place-items-center rounded-full bg-amber-100 text-amber-500">
+              <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+            </span>
+            <div className="text-xs">
+              <p className="font-semibold text-brand-navy">4.9 · 12k+</p>
+              <p className="text-slate-400">{t('feat.saveTime.title')}</p>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   )

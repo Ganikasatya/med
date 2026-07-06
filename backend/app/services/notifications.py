@@ -16,6 +16,7 @@ from ..database import utcnow
 from ..models import (
     EmailLog, Notification, PushNotification, SmsLog, WhatsappLog,
 )
+from . import mailer
 
 # Canned message templates exposed via GET /notification-templates.
 TEMPLATES = [
@@ -72,13 +73,42 @@ def send_whatsapp(db: Session, phone: str, message: str, *, ntype: str = "genera
     return n
 
 
-def send_email(db: Session, to_email: str, subject: str, body: str, *, ntype: str = "general", **refs) -> Notification:
+def send_email(db: Session, to_email: str, subject: str, body: str, *, ntype: str = "general",
+               html: str | None = None, **refs) -> Notification:
+    """Send a transactional email.
+
+    Goes out over real SMTP when mail is enabled+configured (services/mailer);
+    otherwise falls back to the no-network mock so dev/demo keeps working. The
+    EmailLog + Notification status reflect the real delivery outcome either way.
+    """
     n = _notification(db, channel="email", ntype=ntype, title=subject, message=body, **refs)
+
+    if mailer.is_enabled():
+        ok, msg_id, error = mailer.send(to_email, subject, body, html=html)
+        n.email_log = EmailLog(
+            to_email=to_email, subject=subject, provider=settings_mail_provider(),
+            provider_msg_id=msg_id, status="sent" if ok else "failed",
+            sent_at=utcnow() if ok else None,
+        )
+        if ok:
+            n.status = "sent"
+            n.sent_at = utcnow()
+        else:
+            n.status = "failed"
+            print(f"[email] send to {to_email} failed: {error}")
+        return n
+
+    # Mock provider — DB-logged only, no network call.
     n.email_log = EmailLog(
         to_email=to_email, subject=subject, provider="mock", provider_msg_id=_mock_id("email"),
         status="sent", sent_at=utcnow(),
     )
     return n
+
+
+def settings_mail_provider() -> str:
+    from ..config import settings
+    return settings.mail_provider or "smtp"
 
 
 def send_push(db: Session, device_token: str, title: str, body: str, *, platform: str = "android",

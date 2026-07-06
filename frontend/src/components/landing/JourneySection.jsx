@@ -1,13 +1,28 @@
 import { useState, useEffect } from 'react'
 import {
   ArrowRight, CheckCircle2, ShieldCheck,
-  MessageSquare, Heart, Users, Smile,
+  MessageSquare, Heart, Users, Smile, Ticket, Bell, CalendarClock, Globe,
 } from 'lucide-react'
 import useInView from '../../hooks/useInView.js'
 import { JOURNEY, REMINDERS, LANGUAGES_INFO, TRUST } from '../../data/journeyData.js'
 import { useI18n } from '../../i18n/index.jsx'
 
 const TRUST_ICONS = { ShieldCheck, Heart, Users, Smile }
+
+// Coloured tiles for the 2×2 reminders grid (green-themed, one per reminder).
+const REMINDER_TILES = [
+  { bg: 'bg-teal-100', text: 'text-teal-700', icon: CheckCircle2 },
+  { bg: 'bg-green-100', text: 'text-green-700', icon: Ticket },
+  { bg: 'bg-emerald-100', text: 'text-emerald-700', icon: Bell },
+  { bg: 'bg-green-200', text: 'text-green-800', icon: CalendarClock },
+]
+
+// Coloured tiles for the 3 language cards (same green family).
+const LANG_TILES = [
+  { bg: 'bg-teal-100', text: 'text-teal-700' },
+  { bg: 'bg-green-100', text: 'text-green-700' },
+  { bg: 'bg-emerald-100', text: 'text-emerald-700' },
+]
 const LANG_TONE = { green: 'bg-brand-green', blue: 'bg-brand-blue', orange: 'bg-orange-400' }
 const EASE = 'ease-[cubic-bezier(0.16,1,0.3,1)]'
 
@@ -203,39 +218,54 @@ function JourneySection() {
               <span className="-ml-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-blueLight text-brand-blue ring-4 ring-white"><MessageSquare className="h-6 w-6" /></span>
               <h3 className="text-[17px] font-extrabold text-brand-navy">{t('journey.remindersTitle')}</h3>
             </div>
-            <ul className="space-y-2.5">
-              {REMINDERS.map((r) => (
-                <li key={r.key} className="flex items-center gap-2.5 text-[14px] text-slate-600">
-                  <CheckCircle2 className="h-5 w-5 shrink-0 text-brand-green" /> {t(`journey.reminder.${r.key}`)}
-                </li>
-              ))}
-            </ul>
+            <div className="grid grid-cols-2 gap-2.5">
+              {REMINDERS.map((r, i) => {
+                const S = REMINDER_TILES[i % REMINDER_TILES.length]
+                const Ic = S.icon
+                return (
+                  <div
+                    key={r.key}
+                    className={`relative flex flex-col items-center justify-center gap-1.5 rounded-xl ${S.bg} p-4 text-center transition-transform duration-300 hover:z-10 hover:scale-[1.25] hover:shadow-lg`}
+                  >
+                    <Ic className={`h-7 w-7 ${S.text}`} />
+                    <span className={`text-[12px] font-semibold leading-tight ${S.text}`}>{t(`journey.reminder.${r.key}`)}</span>
+                  </div>
+                )
+              })}
+            </div>
           </Reveal>
 
           <Reveal show={panelIn} delay={140} className="flex flex-col items-center rounded-3xl border border-slate-100 bg-white p-6 text-center shadow-card transition-shadow hover:shadow-cardHover">
             <h3 className="text-[17px] font-extrabold text-brand-blue">{t('journey.multilingualTitle')}</h3>
             <div className="mt-4 grid w-full grid-cols-3 gap-2.5">
-              {LANGUAGES_INFO.map((l) => (
-                <div key={l.key} className={`flex min-w-0 flex-col items-center rounded-2xl px-2 py-2.5 text-white shadow-md transition-transform duration-300 hover:-translate-y-1 ${LANG_TONE[l.tone]}`}>
-                  <p className="text-[14px] font-extrabold leading-tight">{l.lang}</p>
-                  <p className="mt-0.5 text-[10px] leading-tight text-white/90">{t(`journey.lang.${l.key}.sub`)}</p>
-                </div>
-              ))}
+              {LANGUAGES_INFO.map((l, i) => {
+                const T = LANG_TILES[i % LANG_TILES.length]
+                return (
+                  <div
+                    key={l.key}
+                    className={`relative flex min-w-0 flex-col items-center gap-1 rounded-2xl ${T.bg} px-2 py-4 text-center transition-transform duration-300 hover:z-10 hover:scale-[1.25] hover:shadow-lg`}
+                  >
+                    <Globe className={`h-6 w-6 ${T.text}`} />
+                    <p className={`text-[14px] font-extrabold leading-tight ${T.text}`}>{l.lang}</p>
+                    <p className={`text-[10px] leading-tight opacity-80 ${T.text}`}>{t(`journey.lang.${l.key}.sub`)}</p>
+                  </div>
+                )
+              })}
             </div>
             <p className="mt-4 text-[13px] text-slate-500">{t('journey.chooseLang')}</p>
           </Reveal>
 
-          <Reveal show={panelIn} delay={280} className="rounded-3xl border border-blue-100 bg-brand-blueLight/50 p-6 shadow-card">
-            <div className="mb-3 flex items-center gap-3">
-              <RupeeCoin className="h-12 w-12 shrink-0 drop-shadow-sm" />
-              <div>
-                <p className="text-[13px] font-semibold text-slate-500">{t('journey.importantNote')}</p>
-                <p className="text-[15px] font-extrabold leading-tight text-brand-blue">{t('journey.feeHeadline')}</p>
-              </div>
+          <Reveal show={panelIn} delay={280} className="flex h-full flex-col items-center rounded-3xl border border-blue-100 bg-brand-blueLight/50 p-6 text-center shadow-card">
+            <div className="[perspective:500px]">
+              <RupeeCoin className="coin-flip-3d h-16 w-16 drop-shadow" />
             </div>
-            <p className="text-[13.5px] leading-relaxed text-slate-600">
-              {t('journey.feeBodyPrefix')}{t('journey.feeBodyPrefix') ? ' ' : ''}<span className="font-bold text-brand-navy">{t('journey.feeBodyBold')}</span>{t('journey.feeBodySuffix')}
-            </p>
+            <p className="mt-3 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">{t('journey.importantNote')}</p>
+            <p className="mt-1 font-extrabold leading-tight text-brand-blue">{t('journey.feeHeadline')}</p>
+            <div className="mt-4 flex flex-1 items-center">
+              <p className="text-[14px] leading-relaxed text-slate-600">
+                {t('journey.feeBodyPrefix')}{t('journey.feeBodyPrefix') ? ' ' : ''}<span className="font-bold text-brand-navy">{t('journey.feeBodyBold')}</span>{t('journey.feeBodySuffix')}
+              </p>
+            </div>
           </Reveal>
         </div>
       </div>

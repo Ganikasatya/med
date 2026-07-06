@@ -8,14 +8,17 @@ are opaque and stored only as SHA-256 hashes.
 """
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..database import get_db, utcnow
 from ..deps import get_current_user
-from ..models import Department, Hospital, HospitalSettings, Patient, RefreshToken, Role, User
-from ..rbac import ROLE_HOSPITAL_ADMIN, ROLE_PATIENT
+from ..models import (
+    Department, Doctor, DoctorAffiliation, DoctorDocument, DoctorStatus,
+    Hospital, HospitalSettings, Patient, RefreshToken, Role, User,
+)
+from ..rbac import ROLE_DOCTOR, ROLE_HOSPITAL_ADMIN, ROLE_PATIENT
 from ..schemas.hospital import ClinicRegister
 from ..schemas.security import (
     ChangePasswordRequest, ForgotPasswordRequest, LoginRequest, LoginResponse,
@@ -27,7 +30,8 @@ from ..security import (
     hash_password, hash_token, new_otp, new_refresh_token, refresh_expiry,
     verify_password,
 )
-from ..services import audit, otp_store
+from ..services import audit, normalize, otp_store, storage, uhid as uhid_service
+from ..services import notifications as notify
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -64,6 +68,15 @@ def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)):
         hosp = db.get(Hospital, user.hospital_id) if user.hospital_id else None
         if hosp and hosp.status == "pending":
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Your clinic registration is pending approval.")
+        if user.role and user.role.name == ROLE_DOCTOR:
+            doc = db.scalar(select(Doctor).where(Doctor.user_id == user.user_id))
+            if doc and doc.verification_status == "pending":
+                raise HTTPException(status.HTTP_403_FORBIDDEN,
+                                    "Your doctor registration is pending verification. "
+                                    "You'll be notified once your documents are reviewed.")
+            if doc and doc.verification_status == "rejected":
+                raise HTTPException(status.HTTP_403_FORBIDDEN,
+                                    f"Your registration was not approved. {doc.rejection_reason or ''}".strip())
         raise HTTPException(status.HTTP_403_FORBIDDEN, f"Account {user.status}")
 
     tokens = _issue_tokens(db, user)
@@ -109,7 +122,9 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
         patient = Patient(
             hospital_id=hospital_id, user_id=user.user_id, name=body.name,
             phone=body.phone, email=body.email, city=body.city or "",
+            abha_number=body.abha_number,
             is_registered=True, registration_source="app",
+            uhid=uhid_service.allocate(db),
         )
         db.add(patient)
         db.flush()
@@ -192,11 +207,20 @@ def otp_register(body: OtpRegister, db: Session = Depends(get_db)):
         raise HTTPException(500, "PATIENT role not seeded")
 
     hospital_id = _default_hospital_id(db, None)
+    # Voice registration transcribes name/city in the patient's own script
+    # (Telugu/Hindi). Normalize to English before storing so records stay
+    # uniformly English — name is transliterated, city snapped to a known
+    # spelling. No-ops for text that is already Latin.
+    known_cities = list(db.scalars(
+        select(Hospital.city).where(Hospital.city != "").distinct()
+    ))
+    clean_name = normalize.to_english_name(body.name)
+    clean_city = normalize.to_english_city(body.city or "", known_cities)
     # No email/password collected — synthesise a unique placeholder email and a
     # random password (the patient authenticates by OTP, never by password).
-    synthetic_email = f"{phone}@mobile.doctormitra.in"
+    synthetic_email = f"{phone}@mobile.tapcure.in"
     user = User(
-        hospital_id=hospital_id, role_id=role.role_id, name=body.name,
+        hospital_id=hospital_id, role_id=role.role_id, name=clean_name,
         email=synthetic_email, phone=phone, password_hash=hash_password(new_refresh_token()),
     )
     db.add(user)
@@ -212,14 +236,18 @@ def otp_register(body: OtpRegister, db: Session = Depends(get_db)):
             existing.user_id = user.user_id
             existing.is_registered = True
             if not existing.name:
-                existing.name = body.name
-            if body.city and not existing.city:
-                existing.city = body.city
+                existing.name = clean_name
+            if clean_city and not existing.city:
+                existing.city = clean_city
+            if body.abha_number and not existing.abha_number:
+                existing.abha_number = body.abha_number
         else:
             db.add(Patient(
-                hospital_id=hospital_id, user_id=user.user_id, name=body.name,
-                phone=phone, email=synthetic_email, city=body.city or "",
+                hospital_id=hospital_id, user_id=user.user_id, name=clean_name,
+                phone=phone, email=synthetic_email, city=clean_city,
+                abha_number=body.abha_number,
                 is_registered=True, registration_source="app",
+                uhid=uhid_service.allocate(db),
             ))
         db.flush()
 
@@ -256,8 +284,9 @@ def register_clinic(body: ClinicRegister, db: Session = Depends(get_db)):
     short = _unique_short_code(db, body.clinic_name)
     hospital = Hospital(
         name=body.clinic_name, short_code=short,
-        address=body.address or body.area, city=body.city,
-        phone=body.phone, email=str(body.email),
+        address=body.address or body.area, city=body.city, pincode=body.pincode or "",
+        latitude=body.latitude, longitude=body.longitude,
+        phone=body.phone, email=str(body.email), hfr_id=body.hfr_id,
         status="pending", is_active=False,
     )
     settings = HospitalSettings(token_prefix=short, consultation_duration=body.consultation_minutes)
@@ -282,6 +311,129 @@ def register_clinic(body: ClinicRegister, db: Session = Depends(get_db)):
         "message": "Registration received. Your clinic is pending approval — "
                    "you'll be notified once it's approved.",
         "hospital_id": hospital.hospital_id,
+        "status": "pending",
+    }
+
+
+_ALLOWED_DOC_TYPES = {
+    "image/jpeg", "image/jpg", "image/png", "image/webp", "application/pdf",
+}
+_DOC_LABELS = {
+    "registration_certificate": "Medical registration certificate",
+    "degree_certificate": "Degree certificate",
+    "council_certificate": "Medical council proof",
+    "id_proof": "ID proof",
+}
+
+
+def _require_credential_file(upload: UploadFile) -> None:
+    if (upload.content_type or "").lower() not in _ALLOWED_DOC_TYPES:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Upload a PDF or image (JPG/PNG) for credential documents",
+        )
+
+
+@router.post("/register-doctor", status_code=201)
+def register_doctor(
+    name: str = Form(...),
+    email: str = Form(...),
+    phone: str = Form(...),
+    password: str = Form(...),
+    registration_number: str = Form(...),
+    specialization: str = Form("General Physician"),
+    qualification: str = Form(""),
+    hpr_id: str | None = Form(None),
+    experience_years: int = Form(0),
+    consultation_fee: float = Form(0),
+    city: str = Form(""),
+    languages: str = Form(""),
+    bio: str = Form(""),
+    registration_certificate: UploadFile = File(...),
+    degree_certificate: UploadFile = File(...),
+    council_certificate: UploadFile | None = File(None),
+    id_proof: UploadFile | None = File(None),
+    db: Session = Depends(get_db),
+):
+    """Public solo-doctor onboarding: creates a PENDING, INACTIVE doctor with the
+    uploaded credential documents. The account can't log in until a Super Admin
+    verifies the documents. Clinic-onboarded doctors don't use this path."""
+    email = email.strip().lower()
+    phone = phone.strip()
+    if not _PHONE_RE.match(phone):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Enter a valid 10-digit mobile number")
+    if len(password) < 6:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Password must be at least 6 characters")
+    if not registration_number.strip():
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Medical council registration number is required")
+    if db.scalar(select(User).where(User.email == email)):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Email already registered")
+    if db.scalar(select(User).where(User.phone == phone)):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Phone already registered")
+
+    # Validate every provided file up-front (before writing anything).
+    files = [
+        ("registration_certificate", registration_certificate),
+        ("degree_certificate", degree_certificate),
+    ]
+    if council_certificate is not None:
+        files.append(("council_certificate", council_certificate))
+    if id_proof is not None:
+        files.append(("id_proof", id_proof))
+    for _, upload in files:
+        _require_credential_file(upload)
+
+    role = db.scalar(select(Role).where(Role.name == ROLE_DOCTOR))
+    if not role:
+        raise HTTPException(500, "DOCTOR role not seeded")
+
+    # Solo doctors aren't tied to a clinic; anchor them to the default tenant
+    # (like self-registering patients) but flag the practice as personal.
+    hospital_id = _default_hospital_id(db, None)
+
+    user = User(
+        hospital_id=hospital_id, role_id=role.role_id, name=name.strip(),
+        email=email, phone=phone, password_hash=hash_password(password),
+        status="inactive",  # activated on verification
+    )
+    db.add(user)
+    db.flush()
+
+    doctor = Doctor(
+        name=name.strip(), user_id=user.user_id, hospital_id=hospital_id,
+        specialization=specialization, qualification=qualification,
+        registration_number=registration_number.strip(),
+        hpr_id=(hpr_id or "").strip() or None,
+        experience_years=experience_years, consultation_fee=consultation_fee,
+        bio=bio, languages=languages,
+        status="inactive",  # operationally hidden until verified
+        verification_status="pending", is_self_registered=True,
+    )
+    doctor.presence = DoctorStatus(status="off_duty")
+    db.add(doctor)
+    db.flush()
+
+    # Personal-practice affiliation (not managed by any hospital).
+    db.add(DoctorAffiliation(
+        doctor_id=doctor.doctor_id, hospital_id=None, practice_type="personal_clinic",
+        name=f"{name.strip()} — Personal Practice", city=city or "",
+        consultation_fee=consultation_fee, managed_by_hospital=False, is_active=True,
+    ))
+
+    # Persist the uploaded credential documents.
+    for doc_type, upload in files:
+        url, size_kb = storage.save_upload("doctor_docs", doctor.doctor_id, upload)
+        db.add(DoctorDocument(
+            doctor_id=doctor.doctor_id, doc_type=doc_type,
+            label=_DOC_LABELS.get(doc_type, doc_type), file_url=url, file_size_kb=size_kb,
+        ))
+
+    audit.log_activity(db, None, "doctor.register", "doctor", {"doctor_id": doctor.doctor_id})
+    db.commit()
+    return {
+        "message": "Registration received. Your documents are pending verification — "
+                   "you'll be notified once approved.",
+        "doctor_id": doctor.doctor_id,
         "status": "pending",
     }
 
